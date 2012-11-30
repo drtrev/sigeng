@@ -166,6 +166,7 @@ plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill,
 
 plotwivbiv <- function(meansdf, dvlabel)
 {
+  # TODO use parameters from plothashes or just call ploteng
   if (is.null(meansdf$biv)) {
     p <- ggplot(meansdf, aes(x=wiv, y=means))
   }else{
@@ -392,6 +393,12 @@ getConc <- function(DF, withinIVs)
   }
 
   return(conc)
+}
+
+diagnosticplot <- function(dv, resids)
+{
+  p <- qplot( resids ) + opts(title=paste(dv, "residuals"))
+  print(p)
 }
 
 doplot <- function(dv, params)
@@ -646,6 +653,8 @@ doanova <- function(dv, params)
 
     command <- paste(command, "))", sep="")
   }
+  # TODO add on betweenIVs here, see
+  # http://wiki.stdout.org/rcookbook/Statistical%20analysis/ANOVA/
   command <- paste(command, ", data=DF)", sep="")
   sink(params$logfile, split=T, append=T)
     cat(params$redolevelsp, "+ ", command, "\n", sep="")
@@ -659,7 +668,7 @@ doanova <- function(dv, params)
       cat("\n")
     #sink()
   }
-  
+
   # try to be clever and work out what the significant effects are
   if (!params$settings$noanovasave) {
     anovafilename <- params$anovafile
@@ -702,7 +711,51 @@ doanova <- function(dv, params)
     sink()
   }
 
-  return(list(my.aov=my.aov, sigs=sigs, trends=trends))
+  # Store residuals for diagnostic plots
+  my.resids <- NULL
+  if (length(withinIVs) > 0) {
+    # model for residuals
+    command <- paste("my.lm <- lm(", dv, " ~ ", sep="")
+    for (iv in withinIVs) {
+      if (iv == withinIVs[1]) { command <- paste(command, iv, sep="") }
+      else { command <- paste(command, " * ", iv, sep="") }
+    }
+    for (iv in betweenIVs) {
+      if (iv == betweenIVs[1] && length(withinIVs)==0) { command <- paste(command, iv, sep="") }
+      else { command <- paste(command, " * ", iv, sep="") }
+    }
+    command <- paste(command, " + ", IDs, ", data=DF)", sep="")
+    sink(params$logfile, split=T, append=T)
+      cat(params$redolevelsp, "+ ", command, "\n", sep="")
+      eval(parse(text=command))
+      cat(params$redolevelsp, "+ my.resids <- residuals(my.lm)\n", sep="")
+      my.resids <- residuals(my.lm)
+    sink()
+  }else{
+    sink(params$logfile, split=T, append=T)
+      cat(params$redolevelsp, "+ my.resids <- residuals(my.aov)\n", sep="")
+      my.resids <- residuals(my.aov)
+    sink()
+  }
+
+  if (!params$settings$noanovaprint) {
+    sink(params$logfile, split=T, append=T)
+      cat(params$redolevelsp, "+ shapiro.test(my.resids)\n", sep="")
+      my.shapiro <- shapiro.test(my.resids)
+      print(my.shapiro)
+      cat("\n")
+
+      if (my.shapiro$p.value <= 0.05) {
+        cat(params$redolevelsp, "+ **Found significant shapiro**\n", sep="")
+      }
+
+      cat("\n")
+       
+    sink()
+  }
+  # end residuals
+  
+  return(list(my.aov=my.aov, sigs=sigs, trends=trends, resids=my.resids))
 }
 
 makeredolevelsp <- function(redolevel)
@@ -735,6 +788,7 @@ sigengdv <- function(params)
   }
 
   if (!params$settings$noplot) {
+    diagnosticplot(dv, anova.results$resids)
     doplot(dv, params)
   }
 
@@ -822,7 +876,7 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
     if (settings$nolatex) nolatex <- "--nolatex "
 # TODO set base path and path to log.pl otherwise this will not work
     # quick attempt:
-    basepath <- "~/ollik-home/R/sigeng/"
+    basepath <- "~/reps/sigeng/extras/"
     command <- paste("perl ", basepath, "log.pl ", onlysig, nolatex, params$logfile, sep="")
     cat(command, "\n")
     system(command)
