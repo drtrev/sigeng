@@ -625,6 +625,41 @@ error <- function()
   return("Error")
 }
 
+robustanova <- function(dv, params)
+{
+  DF <- params$DF
+  IDs <- params$IDs
+  withinIVs <- params$withinIVs
+  betweenIVs <- params$betweenIVs
+
+  robust <- NULL
+
+  # robust
+  if (length(betweenIVs) == 0 && length(withinIVs) == 1) {
+    # Just within, can use rmanova from WRS package
+    # Get groups as columns, pass it as matrix
+    m <- melt(DF)
+    m <- m[m$variable==dv,]
+    command <- paste("DFwide <- as.matrix(cast(m, ... ~ variable + ", withinIVs[1], "))", sep="")
+    eval(parse(text=command))
+    robust <- rmanova(DFwide, tr=.2)
+
+    if (!params$settings$noanovaprint) {
+      cat("Robust analysis:\n")
+      print(robust)
+    }
+
+    if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
+      if (robust$siglevel <= 0.05) 
+        cat(params$redolevelsp, "+ **Robust significant**\n\n", sep="")
+    if (!params$settings$noanovasave) sink()
+  }else{
+    cat("Robust method not implemented for this design\n")
+  }
+
+  return(robust)
+}
+
 doanova <- function(dv, params)
 {
   DF <- params$DF
@@ -656,9 +691,11 @@ doanova <- function(dv, params)
   # TODO add on betweenIVs here, see
   # http://wiki.stdout.org/rcookbook/Statistical%20analysis/ANOVA/
   command <- paste(command, ", data=DF)", sep="")
-  sink(params$logfile, split=T, append=T)
+  # TODO noanovasave was meant for not saving anova file
+  # Should add a nolog and change all sinks to log() and unlog()
+  if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
     cat(params$redolevelsp, "+ ", command, "\n", sep="")
-  sink()
+  if (!params$settings$noanovasave) sink()
 
   eval(parse(text=command))
 
@@ -725,21 +762,21 @@ doanova <- function(dv, params)
       else { command <- paste(command, " * ", iv, sep="") }
     }
     command <- paste(command, " + ", IDs, ", data=DF)", sep="")
-    sink(params$logfile, split=T, append=T)
+    if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
       cat(params$redolevelsp, "+ ", command, "\n", sep="")
       eval(parse(text=command))
       cat(params$redolevelsp, "+ my.resids <- residuals(my.lm)\n", sep="")
       my.resids <- residuals(my.lm)
-    sink()
+    if (!params$settings$noanovasave) sink()
   }else{
-    sink(params$logfile, split=T, append=T)
+    if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
       cat(params$redolevelsp, "+ my.resids <- residuals(my.aov)\n", sep="")
       my.resids <- residuals(my.aov)
-    sink()
+    if (!params$settings$noanovasave) sink()
   }
 
   if (!params$settings$noanovaprint) {
-    sink(params$logfile, split=T, append=T)
+    if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
       cat(params$redolevelsp, "+ shapiro.test(my.resids)\n", sep="")
       my.shapiro <- shapiro.test(my.resids)
       print(my.shapiro)
@@ -751,11 +788,13 @@ doanova <- function(dv, params)
 
       cat("\n")
        
-    sink()
+    if (!params$settings$noanovasave) sink()
   }
   # end residuals
+
+  robust <- robustanova(dv, params)
   
-  return(list(my.aov=my.aov, sigs=sigs, trends=trends, resids=my.resids))
+  return(list(my.aov=my.aov, sigs=sigs, trends=trends, resids=my.resids, robust=robust))
 }
 
 makeredolevelsp <- function(redolevel)
@@ -836,7 +875,7 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
     warning("Only 1 ID; setting noanova")
   }
 
-  if (!settings$noanova) {
+  if (!settings$noanova && !settings$noanovasave) {
     myappend=T
     if (params$clobberlog) myappend=F
     sink(params$logfile, split=T, append=myappend)
@@ -882,7 +921,8 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
     system(command)
   }
 
-  summary(anova.results$my.aov)
+  #summary(anova.results$my.aov)
+  anova.results
 
   #if (is.null(myredo)) { return(DF) } else { return(myredo) }
 }
