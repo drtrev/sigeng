@@ -255,6 +255,14 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
           opts=NULL,
           filenames=filenames))
   }
+  if (length(betweenIVs) == 1 && length(withinIVs) == 0) {
+    # x factor1
+    plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
+          ylab=dv, y=dv, fill=NULL, filllab=NULL,
+          facet=NULL, type="bar",
+          opts=NULL,
+          filenames=filenames))
+  }
 
   if (is.null(plothashes)) cat("NO DEFAULT PLOT FOUND\n\n")
 
@@ -447,42 +455,58 @@ doplot <- function(dv, params)
     #print(paste("wiv: ", wiv, ", biv: ", biv))
     # Could probably use summaryBy here:
 
-    DF$conc <- getConc(DF, withinIVs)
+    if (length(betweenIVs) > 0) cat("Only using one biv right now\n")
 
-    for (i in levels(DF[,biv])) {
-      DFsub <- DF[DF[,biv]==i,]
-      #print(head(DFsub))
+    if (!is.null(withinIVs)) {
 
-      # correct within error bars for subset only
-      temp <- calcadj(DFsub, variable="conc", value=dv)
-      temp[,biv] <- unique(DFsub[,biv])
+      DF$conc <- getConc(DF, withinIVs)
 
-      if (is.null(meansdf)) meansdf <- temp
-      else meansdf <- rbind(meansdf, temp)
-      
-      #for (wiv in withinIVs) {
-      #  temp <- data.frame(means=tapply(DFsub[,dv], DFsub[,wiv], mean), stderrs=tapply(DFsub[,dv], DFsub[,wiv], std.error), wiv=levels(DFsub[,wiv]), biv=i)
-      #  if (is.null(meansdf)) meansdf <- temp
-      #  else meansdf <- rbind(meansdf, temp)
-      #  print(meansdf)
-      #}
-    }
+      for (i in levels(DF[,biv])) {
+        DFsub <- DF[DF[,biv]==i,]
+        #print(head(DFsub))
 
-    rownames(meansdf) <- NULL
-    colnames(meansdf)[3] <- "condition"
-    colnames(meansdf)[4:(ncol(meansdf)-1)] <- withinIVs # -1 for biv
-    for (tempcol in withinIVs) meansdf[,tempcol] <- factor(meansdf[,tempcol], levels=levels(DF[,tempcol]))
-    meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
-    row.names(meansdf) <- NULL
-    #attr(meansdf$means, "names") <- NULL # calcadj should do this really
-    #attr(meansdf$stderrs, "names") <- NULL
-    print(meansdf)
+        # correct within error bars for subset only
+        temp <- calcadj(DFsub, variable="conc", value=dv)
+        temp[,biv] <- unique(DFsub[,biv])
 
-    if (length(withinIVs) == 1) {
-      colnames(meansdf)[4] <- "wiv"
-      plotwivbiv(meansdf, dv)
+        if (is.null(meansdf)) meansdf <- temp
+        else meansdf <- rbind(meansdf, temp)
+        
+        #for (wiv in withinIVs) {
+        #  temp <- data.frame(means=tapply(DFsub[,dv], DFsub[,wiv], mean), stderrs=tapply(DFsub[,dv], DFsub[,wiv], std.error), wiv=levels(DFsub[,wiv]), biv=i)
+        #  if (is.null(meansdf)) meansdf <- temp
+        #  else meansdf <- rbind(meansdf, temp)
+        #  print(meansdf)
+        #}
+      }
+
+      rownames(meansdf) <- NULL
+      colnames(meansdf)[3] <- "condition"
+      colnames(meansdf)[4:(ncol(meansdf)-1)] <- withinIVs # -1 for biv
+      for (tempcol in withinIVs) meansdf[,tempcol] <- factor(meansdf[,tempcol], levels=levels(DF[,tempcol]))
+      meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
+      row.names(meansdf) <- NULL
+      #attr(meansdf$means, "names") <- NULL # calcadj should do this really
+      #attr(meansdf$stderrs, "names") <- NULL
+      print(meansdf)
+
+      if (length(withinIVs) == 1) {
+        colnames(meansdf)[4] <- "wiv"
+        plotwivbiv(meansdf, dv)
+      }else{
+        ploteng(DF, meansdf, plothashes=plothashes, nosave=params$settings$noplotsave)
+      }
+
     }else{
-      ploteng(DF, meansdf, plothashes=plothashes, nosave=params$settings$noplotsave)
+
+       # for one biv no within ivs
+       means <- unname(tapply(DF[,dv], DF[,biv], mean))
+       stderrs <- unname(tapply(DF[,dv], DF[,biv], std.error))
+       meansdf <- data.frame(means=means, stderrs=stderrs, condition=unique(DF[,biv]))
+       colnames(meansdf)[3] <- biv
+
+       ploteng(DF, meansdf, plothashes=plothashes, nosave=params$settings$noplotsave)
+
     }
 
   }else{ # If we don't have between IVs
@@ -635,6 +659,8 @@ robustanova <- function(dv, params)
   robust <- NULL
 
   # robust
+
+  # TODO could also use ranked based methods - this here is trimmed means
   if (length(betweenIVs) == 0 && length(withinIVs) == 1) {
     # Just within, can use rmanova from WRS package
     # Get groups as columns, pass it as matrix
@@ -653,6 +679,27 @@ robustanova <- function(dv, params)
       if (robust$siglevel <= 0.05) 
         cat(params$redolevelsp, "+ **Robust significant**\n\n", sep="")
     if (!params$settings$noanovasave) sink()
+  }else if (length(betweenIVs) == 1 && length(withinIVs) == 0) {
+    
+    # Get groups as columns, pass it as matrix
+    m <- melt(DF)
+    m <- m[m$variable==dv,]
+    cat("Note: taking mean to aggregate trials\n")
+    command <- paste("DFwide <- as.matrix(cast(m, ... ~ variable + ", betweenIVs[1], ", fun.aggregate=mean))", sep="")
+    eval(parse(text=command))
+    print(head(DFwide))
+    robust <- rananova(DFwide, tr=.2)
+
+    if (!params$settings$noanovaprint) {
+      cat("Robust analysis:\n")
+      print(robust)
+    }
+
+    if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
+      if (robust$siglevel <= 0.05) 
+        cat(params$redolevelsp, "+ **Robust significant**\n\n", sep="")
+    if (!params$settings$noanovasave) sink()
+
   }else{
     cat("Robust method not implemented for this design\n")
   }
