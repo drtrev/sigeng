@@ -62,6 +62,7 @@ plotbar <- function(meansdf, x="variable", dvlabel, fill, filebase)
 
 plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill, rows=NULL, xlabel, filebase)
 {
+  print(meansDF)
   if (plothash[["type"]] == "bar") {
 
     # Create separate vars for these cos we want to set defaults and don't want to store them in plothash (which I think is passed by reference, see ?hash)
@@ -502,7 +503,7 @@ doplot <- function(dv, params)
        # for one biv no within ivs
        means <- unname(tapply(DF[,dv], DF[,biv], mean))
        stderrs <- unname(tapply(DF[,dv], DF[,biv], std.error))
-       meansdf <- data.frame(means=means, stderrs=stderrs, condition=unique(DF[,biv]))
+       meansdf <- data.frame(means=means, stderrs=stderrs, condition=levels(DF[,biv]))
        colnames(meansdf)[3] <- biv
 
        ploteng(DF, meansdf, plothashes=plothashes, nosave=params$settings$noplotsave)
@@ -666,12 +667,35 @@ robustanova <- function(dv, params)
     # Get groups as columns, pass it as matrix
     m <- melt(DF)
     m <- m[m$variable==dv,]
-    command <- paste("DFwide <- as.matrix(cast(m, ... ~ variable + ", withinIVs[1], "))", sep="")
+    command <- paste("DFwide <- as.matrix(cast(m, ... ~ variable + ", withinIVs[1], ", fun.aggregate=mean))", sep="")
     eval(parse(text=command))
+    print(head(DFwide))
+
+    robust <- rmanovab(DFwide, tr=.2)
+
+    if (!params$settings$noanovaprint) {
+      cat("Robust analysis trimmed means bootstrap:\n")
+      print(robust)
+    }
+
+    robust <- friedman.test(DFwide)
+
+    if (!params$settings$noanovaprint) {
+      cat("Robust analysis friedman:\n")
+      print(robust)
+    }
+
+    robust <- bprm(DFwide)
+
+    if (!params$settings$noanovaprint) {
+      cat("Robust analysis bprm:\n")
+      print(robust)
+    }
+
     robust <- rmanova(DFwide, tr=.2)
 
     if (!params$settings$noanovaprint) {
-      cat("Robust analysis:\n")
+      cat("Robust analysis trimed means:\n")
       print(robust)
     }
 
@@ -684,7 +708,7 @@ robustanova <- function(dv, params)
     # Get groups as columns, pass it as matrix
     m <- melt(DF)
     m <- m[m$variable==dv,]
-    cat("Note: taking mean to aggregate trials\n")
+    cat("Robust note: taking mean to aggregate trials\n")
     command <- paste("DFwide <- as.matrix(cast(m, ... ~ variable + ", betweenIVs[1], ", fun.aggregate=mean))", sep="")
     eval(parse(text=command))
     print(head(DFwide))
@@ -873,8 +897,9 @@ sigengdv <- function(params)
     anova.results <- doanova(dv, params)
   }
 
+cat ("got here")
   if (!params$settings$noplot) {
-    diagnosticplot(dv, anova.results$resids)
+    if (!params$settings$noanova) diagnosticplot(dv, anova.results$resids)
     doplot(dv, params)
   }
 
