@@ -101,8 +101,17 @@ plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill,
   if (!is.null(plothash[["theme"]])) theme <- paste(" + theme_", plothash[["theme"]], sep="")
   else theme <- NULL
 
+  if (!is.null(plothash[["scale_fill"]])) scale_fill <- paste(" + scale_fill_", plothash[["scale_fill"]], sep="")
+  else scale_fill <- NULL
+
   myopts <- NULL
   if (!is.null(plothash[["opts"]])) myopts <- paste(" + opts(", plothash[["opts"]], ")", sep="")
+
+  signif <- NULL
+  if (!is.null(plothash[["signif"]])) signif <- paste(" + geom_segment(", plothash[["signif"]], ")", sep="")
+
+  text <- NULL
+  if (!is.null(plothash[["text"]])) text <- paste(" + geom_text(", plothash[["text"]], ")", sep="")
 
 
   errorbar <- NULL
@@ -150,7 +159,7 @@ plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill,
     command <- paste(command, ", labels=c(\"", paste(plothash[["filllabs"]], collapse='","', sep=""), "\")", sep="")
     command <- paste(command, ", breaks=c(\"", paste(plothash[["fillbreaks"]], collapse='","', sep=""), "\")", sep="")
   }
-  command <- paste(command, ")", theme, myopts, sep="")
+  command <- paste(command, ")", scale_fill, signif, text, theme, myopts, sep="")
   cat(command, "\n")
   eval(parse(text=command))
 
@@ -216,7 +225,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 1 && length(withinIVs) == 3) {
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[2], x=withinIVs[2], xticlabs=levels(DF[,withinIVs[2]]), xticbreaks=levels(DF[,withinIVs[2]]),
-          ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3],
+          ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3], scale_fill=NULL, signif=NULL, text=NULL,
           facet=paste("grid(", betweenIVs[1], " ~ ", withinIVs[1], ")", sep=""), type="bar",
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
@@ -226,7 +235,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
           ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2], filllabs=levels(DF[,withinIVs[2]]), fillbreaks=levels(DF[,withinIVs[2]]),
-          facet=paste("grid(. ~ ", betweenIVs[1], ")", sep=""), type="bar",
+          facet=paste("grid(. ~ ", betweenIVs[1], ")", sep=""), type="bar", scale_fill=NULL, signif=NULL, text=NULL,
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
   }
@@ -235,7 +244,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[2], x=withinIVs[2], xticlabs=levels(DF[,withinIVs[2]]), xticbreaks=levels(DF[,withinIVs[2]]),
           ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3],
-          facet=paste("grid(. ~ ", withinIVs[1], ")", sep=""), type="bar",
+          facet=paste("grid(. ~ ", withinIVs[1], ")", sep=""), type="bar", scale_fill=NULL, signif=NULL, text=NULL,
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
   }
@@ -243,7 +252,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 0 && length(withinIVs) == 2) {
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
-          ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2],
+          ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2], scale_fill=NULL, signif=NULL, text=NULL,
           facet=NULL, type="bar",
           opts=NULL,
           filenames=filenames))
@@ -251,7 +260,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 0 && length(withinIVs) == 1) {
     # x factor1
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
-          ylab=dv, y=dv, fill=NULL, filllab=NULL,
+          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL,
           facet=NULL, type="bar",
           opts=NULL,
           filenames=filenames))
@@ -259,7 +268,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 1 && length(withinIVs) == 0) {
     # x factor1
     plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
-          ylab=dv, y=dv, fill=NULL, filllab=NULL,
+          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL,
           facet=NULL, type="bar",
           opts=NULL,
           filenames=filenames))
@@ -663,10 +672,14 @@ robustanova <- function(dv, params)
 
   # TODO could also use ranked based methods - this here is trimmed means
   if (length(betweenIVs) == 0 && length(withinIVs) == 1) {
+    cat("Detected no bivs and 1 wiv\n")
+    print(withinIVs)
     # Just within, can use rmanova from WRS package
     # Get groups as columns, pass it as matrix
     m <- melt(DF)
     m <- m[m$variable==dv,]
+    # If we're redoing then this withinIV might not cover all the data, so first get the columns we're interested in
+    m <- m[,c(IDs, "value", "variable", withinIVs[1])]
     command <- paste("DFwide <- as.matrix(cast(m, ... ~ variable + ", withinIVs[1], ", fun.aggregate=mean))", sep="")
     eval(parse(text=command))
     print(head(DFwide))
