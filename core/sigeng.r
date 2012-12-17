@@ -136,7 +136,9 @@ plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill,
     plottype <- "geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond))"
 
   }else{
-    plottype <- "geom_boxplot()"
+    plottype <- "geom_boxplot("
+    if (!is.null(plothash[["width"]])) plottype <- paste(plottype, "width=", plothash[["width"]], sep="")
+    plottype <- paste(plottype, ")", sep="")
   }
   #if (!is.null(plothash[["xticlabs"]]) xticlabs <- plothash[["xticlabs"]]
   
@@ -225,7 +227,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 1 && length(withinIVs) == 3) {
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[2], x=withinIVs[2], xticlabs=levels(DF[,withinIVs[2]]), xticbreaks=levels(DF[,withinIVs[2]]),
-          ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3], scale_fill=NULL, signif=NULL, text=NULL,
+          ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           facet=paste("grid(", betweenIVs[1], " ~ ", withinIVs[1], ")", sep=""), type="bar",
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
@@ -235,7 +237,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
           ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2], filllabs=levels(DF[,withinIVs[2]]), fillbreaks=levels(DF[,withinIVs[2]]),
-          facet=paste("grid(. ~ ", betweenIVs[1], ")", sep=""), type="bar", scale_fill=NULL, signif=NULL, text=NULL,
+          facet=paste("grid(. ~ ", betweenIVs[1], ")", sep=""), type="bar", scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
   }
@@ -244,7 +246,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[2], x=withinIVs[2], xticlabs=levels(DF[,withinIVs[2]]), xticbreaks=levels(DF[,withinIVs[2]]),
           ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3],
-          facet=paste("grid(. ~ ", withinIVs[1], ")", sep=""), type="bar", scale_fill=NULL, signif=NULL, text=NULL,
+          facet=paste("grid(. ~ ", withinIVs[1], ")", sep=""), type="bar", scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
   }
@@ -252,7 +254,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 0 && length(withinIVs) == 2) {
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
-          ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2], scale_fill=NULL, signif=NULL, text=NULL,
+          ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           facet=NULL, type="bar",
           opts=NULL,
           filenames=filenames))
@@ -260,7 +262,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 0 && length(withinIVs) == 1) {
     # x factor1
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
-          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL,
+          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           facet=NULL, type="bar",
           opts=NULL,
           filenames=filenames))
@@ -268,7 +270,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 1 && length(withinIVs) == 0) {
     # x factor1
     plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
-          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL,
+          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           facet=NULL, type="bar",
           opts=NULL,
           filenames=filenames))
