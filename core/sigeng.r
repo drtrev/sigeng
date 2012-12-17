@@ -42,6 +42,18 @@ checkForBetweenInteraction <- function(mysum, IDs, DVs, withinIVs, betweenIVs)
   interaction
 }
 
+calcSummaryDF <- function(DF, variable, value)
+{
+  summaries <- tapply(DF[,value], DF[,variable], summary)
+  summaryDF <- data.frame(do.call(rbind, summaries))
+
+  command <- paste("summaryDF <- cbind(", variable, "=rownames(summaryDF), summaryDF)", sep="")
+  eval(parse(text=command))
+  rownames(summaryDF) <- NULL
+
+  summaryDF
+}
+
 plotbar <- function(meansdf, x="variable", dvlabel, fill, filebase)
 {
   command <- paste("p <- ggplot(meansdf, aes(x=", x, ", y=means", sep="")
@@ -60,9 +72,9 @@ plotbar <- function(meansdf, x="variable", dvlabel, fill, filebase)
   #ggsave(file=paste("/tmp/", filebase, ".eps", sep=""), width=10, height=7)
 }
 
-plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill, rows=NULL, xlabel, filebase)
+plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable", y, fill, rows=NULL, xlabel, filebase)
 {
-  print(meansDF)
+  #print(meansDF)
   if (plothash[["type"]] == "bar") {
 
     # Create separate vars for these cos we want to set defaults and don't want to store them in plothash (which I think is passed by reference, see ?hash)
@@ -79,6 +91,14 @@ plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill,
     if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
     if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
     command <- paste("p <- ggplot() + geom_point(data=meansDF, aes(x=", plothash[["x"]], ", y=", means, sep="")
+
+  }else if (plothash[["type"]] == "crossbar") {
+    
+    median <- "Median"
+    X1stQu <- "X1st.Qu."
+    X3rdQu <- "X3rd.Qu."
+    if (!is.null(plothash[["median"]])) median <- plothash[["median"]]
+    command <- paste("p <- ggplot(summaryDF, aes(x=", plothash[["x"]], ", y=", median, ", ymin=", X1stQu, ", ymax=", X3rdQu, sep="")
 
   }else{
 
@@ -120,7 +140,6 @@ plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill,
     dodge <- position_dodge(width=0.9)
     plottype <- "geom_bar(position=dodge, stat=\"identity\")"
     #if (!is.null(plothash[["stderrs"]])) {
-    # TODO this uses standard names means and stderrs - might be good if these could be vars but not sure of best way to do it yet
       command <- paste("limits <- aes(ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
       cat(command, "\n")
       eval(parse(text=command))
@@ -134,6 +153,12 @@ plotit <- function(DF, meansDF, fit, plothash, nosave=F) #x="variable", y, fill,
     # and another function should join together different conditions with a variable 'cond'
     # so we have already x, y, cond
     plottype <- "geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond))"
+
+  }else if (plothash[["type"]] == "crossbar") {
+
+    plottype <- "geom_crossbar("
+    if (!is.null(plothash[["width"]])) plottype <- paste(plottype, "width=", plothash[["width"]], sep="")
+    plottype <- paste(plottype, ")", sep="")
 
   }else{
     plottype <- "geom_boxplot("
@@ -209,11 +234,11 @@ plotwivbiv <- function(meansdf, dvlabel)
 #  print("Printed")
 }
 
-ploteng <- function(DF, meansDF, fit=NULL, plothashes, nosave=F)
+ploteng <- function(DF, meansDF, summaryDF, fit=NULL, plothashes, nosave=F)
 {
   for (i in plothashes) {
     #if (i[["type"]] == "box")
-    plotit(DF, meansDF, fit, i, nosave)
+    plotit(DF, meansDF, summaryDF, fit, i, nosave)
   }
 }
 
@@ -295,6 +320,22 @@ plotWithinMult <- function(dv, params, plotPsycho)
 
   meansdf <- calcadj(DF, variable="conc", value=dv)
 
+  summarydf <- calcSummaryDF(DF, variable="conc", value=dv)
+  # split out our conc variables into separate ones for plotting
+  summarydf <- cbind(summarydf, colsplit(summarydf$conc, "\\.", names=withinIVs))
+  # make the new column factor levels in the same order as they appear in the DF
+  for (i in withinIVs) { summarydf[,i] <- factor(summarydf[,i], levels=unique(summarydf[,i])) }
+
+  # hack: can't think of a good way to combine columns depending on params yet
+  summarydf$bodysync <- paste(summarydf$body, summarydf$sync, sep=".")
+  summarydf$bodysync <- factor(summarydf$bodysync, levels=c("Body.Synchronous", "Body.Asynchronous", "Object.Synchronous", "Object.Asynchronous"), labels=c("BS", "BAS", "OS", "OAS"))
+  # end hack
+
+  cat("sync levels\n")
+  print(levels(summarydf$sync))
+  cat("Summary DF\n")
+  print(summarydf)
+
   #cat("withinIVs")
   #print(withinIVs)
   #print(DF$conc)
@@ -373,7 +414,7 @@ plotWithinMult <- function(dv, params, plotPsycho)
 
   # assume we have a variable with concatenated conditions:
   #plotbox(DF, withinIVs[1], dv, withinIVs[2], withinIVs[3], xlabel, filebase)
-  ploteng(DF, meansdf, fit, plothashes=plothashes, nosave=params$settings$noplotsave)
+  ploteng(DF, meansdf, summarydf, fit, plothashes=plothashes, nosave=params$settings$noplotsave)
 }
 
 addPlotOpt <- function(plothash, str)
@@ -502,11 +543,13 @@ doplot <- function(dv, params)
       #attr(meansdf$stderrs, "names") <- NULL
       print(meansdf)
 
+      summarydf <- calcSummaryDF(DF, biv, dv)
+
       if (length(withinIVs) == 1) {
         colnames(meansdf)[4] <- "wiv"
         plotwivbiv(meansdf, dv)
       }else{
-        ploteng(DF, meansdf, plothashes=plothashes, nosave=params$settings$noplotsave)
+        ploteng(DF, meansdf, summarydf, plothashes=plothashes, nosave=params$settings$noplotsave)
       }
 
     }else{
@@ -517,7 +560,9 @@ doplot <- function(dv, params)
        meansdf <- data.frame(means=means, stderrs=stderrs, condition=levels(DF[,biv]))
        colnames(meansdf)[3] <- biv
 
-       ploteng(DF, meansdf, plothashes=plothashes, nosave=params$settings$noplotsave)
+       summarydf <- calcSummaryDF(DF, biv, dv)
+
+       ploteng(DF, meansdf, summarydf, plothashes=plothashes, nosave=params$settings$noplotsave)
 
     }
 
@@ -528,6 +573,7 @@ doplot <- function(dv, params)
       meansdf <- calcadj(DF, variable=withinIVs[1], value=dv)
       colnames(meansdf)[3] <- "wiv"
       #print(meansdf)
+      #summarydf <- calcSummaryDF(DF, withinIVs[1], dv)
       plotwivbiv(meansdf, dv)
     }else{
       # if psychophysic do this for each participant first then overall
