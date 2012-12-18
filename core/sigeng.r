@@ -54,6 +54,78 @@ calcSummaryDF <- function(DF, variable, value)
   summaryDF
 }
 
+calcSignifDF <- function(DF, sig)
+# Take a list of significant data, e.g.
+#sig <- list(
+#     list(
+#       cut    = list(name="quest", value="Q5"),
+#       first  = list(body.sync="Body.Synchronous"),
+#       second = list(body.sync="Body.Asynchronous"),
+#       y      = 7.5,
+#       height = 0.1,
+#       text   = "***"
+#     )
+#)
+# Return signifDF, i.e. x, y, xend, yend, quest=...
+{
+  # For each significant thing
+  for (s in sig) {
+
+    xvariable <- names(s[["first"]])[1] # e.g. body.sync
+
+    ypos <- 7.5 # Default
+    if (!is.null(s[["y"]])) ypos <- s[["y"]]
+
+    height <- 0.1 # Default
+    if (!is.null(s[["height"]])) height <- s[["height"]]
+
+    if (!is.null(s[["cut"]])) {
+      # Cut out relevant part of DF
+      cutname  <- s[["cut"]][["name"]]
+      cutvalue <- s[["cut"]][["value"]]
+      DFcut <- DF[DF[,cutname] == cutvalue,]
+    }else{
+      cutname <- NULL
+      cutvalue <- NULL
+      DFcut <- DF
+    }
+
+    # Get start point, i.e. x pos where var is first value
+    firstvalue  <- s[["first"]][[xvariable]]
+    secondvalue <- s[["second"]][[xvariable]]
+
+    # Find where this is in DF
+    x <- which(levels(DFcut[,xvariable]) == firstvalue)
+    xend <- which(levels(DFcut[,xvariable]) == secondvalue)
+
+    # Make a signifDF based on this
+    #  2>-------3
+    #  |        V
+    #  |        |
+    #  ^
+    #  1
+
+    #          1  2  3                    1            2     3
+    xs    <- c(x, x, xend);    ys    <- c(ypos-height, ypos, ypos)
+    xends <- c(x, xend, xend); yends <- c(ypos,        ypos, ypos-height)
+    
+
+    # TODO append don't overwrite
+    signifDF <- data.frame(x=xs, y=ys, xend=xends, yend=yends, tempvar=rep(cutvalue, 3))
+    signifDF <- rename(signifDF, c(tempvar=cutname))
+
+    # Store text position, i.e. x, y, cutname, label
+    text <- "****"
+    if (!is.null(s[["text"]])) text <- s[["text"]]
+    textDF <- data.frame(x=mean(c(x, xend)), y=ypos + 0.1, tempvar=cutvalue, label=text)
+    textDF <- rename(textDF, c(tempvar=cutname))
+  }
+
+  signifDFs <- list(signifDF=signifDF, textDF=textDF)
+
+  return(signifDFs)
+}
+
 plotbar <- function(meansdf, x="variable", dvlabel, fill, filebase)
 {
   command <- paste("p <- ggplot(meansdf, aes(x=", x, ", y=means", sep="")
@@ -75,6 +147,10 @@ plotbar <- function(meansdf, x="variable", dvlabel, fill, filebase)
 plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable", y, fill, rows=NULL, xlabel, filebase)
 {
   #print(meansDF)
+
+  ####
+  # Prepare summary DFs and signifDF
+
   if (length(plothash[["combine"]]) > 1) {
     # make a new variable, which is named by joining all parts of "combine", e.g. "body.sync"
     newvar <- paste(plothash[["combine"]], collapse=".")
@@ -83,14 +159,38 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     # would make Body.Synchronous, Body.Asynchronous etc.
     command <- paste("summaryDF$", newvar, " <- paste(", sep="")
     command <- paste(command, "summaryDF$", paste(plothash[["combine"]], collapse=", summaryDF$"), ", sep=\".\")", sep="")
-    #cat(paste(command, "\n", sep=""))
     eval(parse(text=command))
 
     # Don't allow for alphabetical order, take levels from the order they appear in DF
-    #cat("summaryDF[,newvar] <- factor(summaryDF[,newvar], levels=unique(summaryDF[,newvar]))\n")
     summaryDF[,newvar] <- factor(summaryDF[,newvar], levels=unique(summaryDF[,newvar]))
+
+    # Same again for main DF, because that's also used for some plots
+    command <- paste("DF$", newvar, " <- paste(", sep="")
+    command <- paste(command, "DF$", paste(plothash[["combine"]], collapse=", DF$"), ", sep=\".\")", sep="")
+    eval(parse(text=command))
+
+    # Don't allow for alphabetical order, take levels from the order they appear in DF
+    DF[,newvar] <- factor(DF[,newvar], levels=unique(DF[,newvar]))
+
+    # Same again for meansDF, because that's also used for some plots
+    command <- paste("meansDF$", newvar, " <- paste(", sep="")
+    command <- paste(command, "meansDF$", paste(plothash[["combine"]], collapse=", meansDF$"), ", sep=\".\")", sep="")
+    eval(parse(text=command))
+
+    # Don't allow for alphabetical order, take levels from the order they appear in DF
+    meansDF[,newvar] <- factor(meansDF[,newvar], levels=unique(meansDF[,newvar]))
   }
 
+  signifDFs <- NULL
+  if (!is.null(plothash[["sig"]])) signifDFs <- calcSignifDF(summaryDF, plothash[["sig"]])
+
+  #
+  ####
+
+  ####
+  # Start the plot
+
+  cat("Plot:\n")
 
   if (plothash[["type"]] == "bar") {
 
@@ -111,11 +211,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   }else if (plothash[["type"]] == "crossbar") {
     
-    median <- "Median"
-    X1stQu <- "X1st.Qu."
-    X3rdQu <- "X3rd.Qu."
-    if (!is.null(plothash[["median"]])) median <- plothash[["median"]]
-    command <- paste("p <- ggplot(summaryDF, aes(x=", plothash[["x"]], ", y=", median, ", ymin=", X1stQu, ", ymax=", X3rdQu, sep="")
+    command <- paste("p <- ggplot()")
 
   }else{
 
@@ -125,12 +221,20 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   if (!is.null(plothash[["colour"]])) command <- paste(command, ", colour=", plothash[["colour"]], sep="")
 
-  if (is.null(plothash[["fill"]])) command <- paste(command, "))", sep="")
-  else command <- paste(command, ", fill=", plothash[["fill"]], "))", sep="")
+  if (plothash[["type"]] != "crossbar") {
+    if (is.null(plothash[["fill"]])) command <- paste(command, "))", sep="")
+    else command <- paste(command, ", fill=", plothash[["fill"]], "))", sep="")
+  }
 
   cat(command, "\n")
   eval(parse(text=command))
 
+  #
+  ####
+
+
+  ####
+  # Make facet, themes and opts vars etc.
 
   if (!is.null(plothash[["facet"]])) facet <- paste(" + facet_", plothash[["facet"]], sep="")
   else facet <- NULL
@@ -145,12 +249,20 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   myopts <- NULL
   if (!is.null(plothash[["opts"]])) myopts <- paste(" + opts(", plothash[["opts"]], ")", sep="")
 
-  signif <- NULL
-  if (!is.null(plothash[["signif"]])) signif <- paste(" + geom_segment(", plothash[["signif"]], ")", sep="")
+  #signif <- NULL
+  #if (!is.null(plothash[["signif"]])) signif <- paste(" + geom_segment(", plothash[["signif"]], ")", sep="")
+  if (!is.null(signifDFs)) signif <- " + geom_segment(data=signifDFs$signifDF, aes(x=x, y=y, xend=xend, yend=yend))"
 
   text <- NULL
-  if (!is.null(plothash[["text"]])) text <- paste(" + geom_text(", plothash[["text"]], ")", sep="")
+  #if (!is.null(plothash[["text"]])) text <- paste(" + geom_text(", plothash[["text"]], ")", sep="")
+  if (!is.null(signifDFs)) text <- " + geom_text(data=signifDFs$textDF, mapping=aes(x=x, y=y, label=label))"
 
+  #
+  ####
+
+
+  ####
+  # Make plot specific command, e.g. geom_boxplot
 
   errorbar <- NULL
   legend <- NULL
@@ -175,18 +287,39 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   }else if (plothash[["type"]] == "crossbar") {
 
+    median <- "Median"
+    X1stQu <- "X1st.Qu."
+    X3rdQu <- "X3rd.Qu."
+    if (!is.null(plothash[["median"]])) median <- plothash[["median"]]
+
     plottype <- "geom_crossbar("
-    if (!is.null(plothash[["width"]])) plottype <- paste(plottype, "width=", plothash[["width"]], sep="")
-    plottype <- paste(plottype, ")", sep="")
+
+    crossbar <- paste("data=summaryDF, mapping=aes(x=", plothash[["x"]], ", y=", median, ", ymin=", X1stQu, ", ymax=", X3rdQu, sep="")
+
+    if (!is.null(plothash[["fill"]])) crossbar <- paste(crossbar, ", fill=", plothash[["fill"]], sep="")
+
+    crossbar <- paste(crossbar, ")", sep="") # end aes
+
+    if (!is.null(plothash[["width"]])) crossbar <- paste(crossbar, ", width=", plothash[["width"]], sep="")
+
+    plottype <- paste(plottype, crossbar, ")", sep="") # end geom_crossbar
 
     # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
-    if (!is.null(plothash[["legend"]]) && plothash[["legend"]] == "boxplot") legend <- paste(" + geom_boxplot(width=", plothash[["width"]], ")", sep="")
+    if (!is.null(plothash[["legend"]]) && plothash[["legend"]] == "boxplot") legend <- paste(" + geom_boxplot(", crossbar, ")", sep="")
   }else{
     plottype <- "geom_boxplot("
     if (!is.null(plothash[["width"]])) plottype <- paste(plottype, "width=", plothash[["width"]], sep="")
     plottype <- paste(plottype, ")", sep="")
   }
   #if (!is.null(plothash[["xticlabs"]]) xticlabs <- plothash[["xticlabs"]]
+
+  #
+  ####
+
+
+
+  ####
+  # Join plot commands together, and adjust the scale
   
   command <- paste("myplot <- p + ", plottype, errorbar, facet, sep="")
 
@@ -202,14 +335,25 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   }
 
 
-  command <- paste(command, " + scale_y_continuous(name=\"", plothash[["ylab"]], "\") + scale_fill_discrete(name=\"", plothash[["filllab"]], "\"", sep="")
-  if (!is.null(plothash[["filllabs"]])) {
-    command <- paste(command, ", labels=c(\"", paste(plothash[["filllabs"]], collapse='","', sep=""), "\")", sep="")
-    command <- paste(command, ", breaks=c(\"", paste(plothash[["fillbreaks"]], collapse='","', sep=""), "\")", sep="")
+  command <- paste(command, " + scale_y_continuous(name=\"", plothash[["ylab"]], "\")", sep="")
+
+  if (is.null(plothash[["scale_fill"]])) {
+    # Filllab is unique in the sense that it also gets its value from fill
+    command <- paste(command, " + scale_fill_discrete(name=\"", plothash[["filllab"]], "\"", sep="")
+    if (!is.null(plothash[["filllabs"]])) {
+      command <- paste(command, ", labels=c(\"", paste(plothash[["filllabs"]], collapse='","', sep=""), "\")", sep="")
+      command <- paste(command, ", breaks=c(\"", paste(plothash[["fillbreaks"]], collapse='","', sep=""), "\")", sep="")
+    }
+    command <- paste(command, ")", sep="")
   }
-  command <- paste(command, ")", scale_fill, signif, text, theme, myopts, legend, sep="")
+
+  command <- paste(command, scale_fill, signif, text, theme, myopts, legend, sep="")
   cat(command, "\n")
   eval(parse(text=command))
+
+  #
+  ####
+
 
   print(myplot)
 
@@ -221,8 +365,9 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     cat("\n")
   }
 
-  # summaryDF is sometimes changed, e.g. combine
-  return(summaryDF)
+  # DFs are sometimes changed, e.g. combine
+  outputDFs <- list(summaryDF=summaryDF, meansDF=meansDF)
+  return(outputDFs)
 }
 
 plotwivbiv <- function(meansdf, dvlabel)
@@ -262,11 +407,11 @@ ploteng <- function(DF, meansDF, summaryDF, fit=NULL, plothashes, nosave=F)
 {
   for (i in plothashes) {
     #if (i[["type"]] == "box")
-    newsummaryDF <- plotit(DF, meansDF, summaryDF, fit, i, nosave)
+    newsummaryDFs <- plotit(DF, meansDF, summaryDF, fit, i, nosave)
   }
 
   # For now return the last one
-  return (newsummaryDF)
+  return (newsummaryDFs)
 }
 
 makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
@@ -353,8 +498,6 @@ plotWithinMult <- function(dv, params, plotPsycho)
   # make the new column factor levels in the same order as they appear in the DF
   for (i in withinIVs) { summarydf[,i] <- factor(summarydf[,i], levels=unique(summarydf[,i])) }
 
-  cat("sync levels\n")
-  print(levels(summarydf$sync))
   cat("Summary DF\n")
   print(summarydf)
 
@@ -437,9 +580,10 @@ plotWithinMult <- function(dv, params, plotPsycho)
   # assume we have a variable with concatenated conditions:
   #plotbox(DF, withinIVs[1], dv, withinIVs[2], withinIVs[3], xlabel, filebase)
   # summarydf may be updated, e.g. combine
-  summarydf <- ploteng(DF, meansdf, summarydf, fit, plothashes=plothashes, nosave=params$settings$noplotsave)
+  summaryDFs <- ploteng(DF, meansdf, summarydf, fit, plothashes=plothashes, nosave=params$settings$noplotsave)
+  #summaryDFs <- list(meansDF=meansdf, summaryDF=summarydf)
 
-  summaryDFs <- list(meansDF=meansdf, summaryDF=summarydf)
+  summaryDFs
 }
 
 addPlotOpt <- function(plothash, str)
