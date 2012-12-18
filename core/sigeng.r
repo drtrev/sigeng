@@ -124,6 +124,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   if (!is.null(plothash[["scale_fill"]])) scale_fill <- paste(" + scale_fill_", plothash[["scale_fill"]], sep="")
   else scale_fill <- NULL
 
+  # TODO opts deprecated
   myopts <- NULL
   if (!is.null(plothash[["opts"]])) myopts <- paste(" + opts(", plothash[["opts"]], ")", sep="")
 
@@ -135,6 +136,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
 
   errorbar <- NULL
+  legend <- NULL
 
   if (plothash[["type"]] == "bar") {
     dodge <- position_dodge(width=0.9)
@@ -160,6 +162,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     if (!is.null(plothash[["width"]])) plottype <- paste(plottype, "width=", plothash[["width"]], sep="")
     plottype <- paste(plottype, ")", sep="")
 
+    # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
+    if (!is.null(plothash[["legend"]]) && plothash[["legend"]] == "boxplot") legend <- paste(" + geom_boxplot(width=", plothash[["width"]], ")", sep="")
   }else{
     plottype <- "geom_boxplot("
     if (!is.null(plothash[["width"]])) plottype <- paste(plottype, "width=", plothash[["width"]], sep="")
@@ -186,7 +190,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     command <- paste(command, ", labels=c(\"", paste(plothash[["filllabs"]], collapse='","', sep=""), "\")", sep="")
     command <- paste(command, ", breaks=c(\"", paste(plothash[["fillbreaks"]], collapse='","', sep=""), "\")", sep="")
   }
-  command <- paste(command, ")", scale_fill, signif, text, theme, myopts, sep="")
+  command <- paste(command, ")", scale_fill, signif, text, theme, myopts, legend, sep="")
   cat(command, "\n")
   eval(parse(text=command))
 
@@ -415,6 +419,8 @@ plotWithinMult <- function(dv, params, plotPsycho)
   # assume we have a variable with concatenated conditions:
   #plotbox(DF, withinIVs[1], dv, withinIVs[2], withinIVs[3], xlabel, filebase)
   ploteng(DF, meansdf, summarydf, fit, plothashes=plothashes, nosave=params$settings$noplotsave)
+
+  summaryDFs <- list(meansDF=meansdf, summaryDF=summarydf)
 }
 
 addPlotOpt <- function(plothash, str)
@@ -469,6 +475,12 @@ doplot <- function(dv, params)
 {
   # get summary, means and stderrs data frame
 
+  # output
+  meansdf <- NULL
+  summarydf <- NULL
+  summaryDFs <- NULL
+
+  # make params easier
   DF <- params$DF
   IDs <- params$IDs
   withinIVs <- params$withinIVs
@@ -596,7 +608,7 @@ doplot <- function(dv, params)
             # TODO should change existing title if it's already an opt
             params$plothashes[[i]] <- addPlotOpt(params$plothashes[[i]], paste("title=\"Participant ", p, "\"", sep=""))
           }
-          plotWithinMult(dv, params, plotPsycho)
+          summaryDFs <- plotWithinMult(dv, params, plotPsycho)
           params$plothashes <- plothashes
         }
         # put params back
@@ -604,12 +616,16 @@ doplot <- function(dv, params)
       }
 
       # overall
-      plotWithinMult(dv, params, plotPsycho)
+      summaryDFs <- plotWithinMult(dv, params, plotPsycho)
 
     }
 
   }
 
+  # summaryDFs is either generated in a sub function or here
+  if (is.null(summaryDFs)) summaryDFs <- list(meansDF=meansdf, summaryDF=summarydf)
+
+  return(summaryDFs)
 } # end doplot
 
 # When there's something significant found we can split data and redo sigeng
@@ -958,10 +974,9 @@ sigengdv <- function(params)
     anova.results <- doanova(dv, params)
   }
 
-cat ("got here")
   if (!params$settings$noplot) {
     if (!params$settings$noanova) diagnosticplot(dv, anova.results$resids)
-    doplot(dv, params)
+    summaryList <- doplot(dv, params)
   }
 
   #checkForBetweenInteraction(summary(my.aov), IDs=IDs, DVs=DVs, withinIVs=withinIVs, betweenIVs=betweenIVs)
@@ -971,7 +986,8 @@ cat ("got here")
     redo(anova.results$sigs, params)
   }
 
-  return(anova.results)
+  sigengout <- list(anova.results=anova.results, summaryDFs=summaryList)
+  return(sigengout)
 }
 
 # Here blocks means the experiment was repeated in more than one block
@@ -1035,7 +1051,8 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
       cat("+ Using dv: ", dv, "\n", sep="")
       params$DVs <- dv # clobber param DVs (would have happened anyway from redo)
       params$redolevelsp <- makeredolevelsp(params$redolevel)
-      anova.results <- sigengdv(params)
+      #anova.results <- sigengdv(params)
+      sigengout <- sigengdv(params)
     }
   }
 
@@ -1055,7 +1072,7 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
   }
 
   #summary(anova.results$my.aov)
-  anova.results
+  sigengout
 
   #if (is.null(myredo)) { return(DF) } else { return(myredo) }
 }
