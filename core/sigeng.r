@@ -192,14 +192,14 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   cat("Plot:\n")
 
+  # TODO tidy this up, most of these options are just ggplot() so can add geom_segment(data=signifDF...) later
+
   if (plothash[["type"]] == "bar") {
 
-    # Create separate vars for these cos we want to set defaults and don't want to store them in plothash (which I think is passed by reference, see ?hash)
-    means <- "means"
-    stderrs <- "stderrs"
-    if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
-    if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
-    command <- paste("p <- ggplot(meansDF, aes(x=", plothash[["x"]], ", y=", means, sep="")
+    # TODO leave ggplot() blank and do it all below so can add geom_segment(data=signifDF)
+    # TODO note I've already changed fill below to not add if we're using bar here, so should
+    # fill even lower down
+    command <- paste("p <- ggplot()")
 
   }else if (plothash[["type"]] == "psycho") {
 
@@ -209,21 +209,20 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
     command <- paste("p <- ggplot() + geom_point(data=meansDF, aes(x=", plothash[["x"]], ", y=", means, sep="")
 
+    if (is.null(plothash[["fill"]])) command <- paste(command, "))", sep="")
+    else command <- paste(command, ", fill=", plothash[["fill"]], "))", sep="")
+
+    if (!is.null(plothash[["colour"]])) command <- paste(command, ", colour=", plothash[["colour"]], sep="")
+
   }else if (plothash[["type"]] == "crossbar") {
     
     command <- paste("p <- ggplot()")
 
   }else{
+    # Default: boxplot
+    plothash[["type"]] <- "boxplot"
+    command <- paste("p <- ggplot()")
 
-    command <- paste("p <- ggplot(DF, aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
-
-  }
-
-  if (!is.null(plothash[["colour"]])) command <- paste(command, ", colour=", plothash[["colour"]], sep="")
-
-  if (plothash[["type"]] != "crossbar") {
-    if (is.null(plothash[["fill"]])) command <- paste(command, "))", sep="")
-    else command <- paste(command, ", fill=", plothash[["fill"]], "))", sep="")
   }
 
   cat(command, "\n")
@@ -249,7 +248,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   myopts <- NULL
   if (!is.null(plothash[["opts"]])) myopts <- paste(" + opts(", plothash[["opts"]], ")", sep="")
 
-  #signif <- NULL
+  signif <- NULL
   #if (!is.null(plothash[["signif"]])) signif <- paste(" + geom_segment(", plothash[["signif"]], ")", sep="")
   if (!is.null(signifDFs)) signif <- " + geom_segment(data=signifDFs$signifDF, aes(x=x, y=y, xend=xend, yend=yend))"
 
@@ -268,13 +267,21 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   legend <- NULL
 
   if (plothash[["type"]] == "bar") {
+    means <- "means"
+    stderrs <- "stderrs"
+    if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
+    if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
+    aescommand <- paste("aes(x=", plothash[["x"]], ", y=", means, sep="")
+    if (!is.null(plothash[["fill"]])) aescommand <- paste(aescommand, ", fill=", plothash[["fill"]], sep="")
+    aescommand <- paste(aescommand, ")", sep="")
+
     dodge <- position_dodge(width=0.9)
-    plottype <- "geom_bar(position=dodge, stat=\"identity\")"
+    plottype <- paste("geom_bar(data=meansDF, mapping=", aescommand, ", position=dodge, stat=\"identity\")", sep="")
     #if (!is.null(plothash[["stderrs"]])) {
-      command <- paste("limits <- aes(ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
+      command <- paste("limits <- aes(x=", plothash[["x"]], ", y=", means, ", ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
       cat(command, "\n")
       eval(parse(text=command))
-      errorbar <- " + geom_errorbar(limits, width=0.1, position=dodge)"
+      errorbar <- " + geom_errorbar(data=meansDF, mapping=limits, width=0.1, position=dodge)"
     #}
   }else if (plothash[["type"]] == "point") {
     plottype <- "geom_point()"
@@ -307,9 +314,11 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
     if (!is.null(plothash[["legend"]]) && plothash[["legend"]] == "boxplot") legend <- paste(" + geom_boxplot(", crossbar, ")", sep="")
   }else{
-    plottype <- "geom_boxplot("
-    if (!is.null(plothash[["width"]])) plottype <- paste(plottype, "width=", plothash[["width"]], sep="")
-    plottype <- paste(plottype, ")", sep="")
+    plottype <- paste("geom_boxplot(data=DF, mapping=aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
+    if (!is.null(plothash[["fill"]])) plottype <- paste(plottype, ", fill=", plothash[["fill"]], sep="")
+    plottype <- paste(plottype, ")", sep="") # end aes
+    if (!is.null(plothash[["width"]])) plottype <- paste(plottype, ", width=", plothash[["width"]], sep="")
+    plottype <- paste(plottype, ")", sep="") # end geom_boxplot
   }
   #if (!is.null(plothash[["xticlabs"]]) xticlabs <- plothash[["xticlabs"]]
 
