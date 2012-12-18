@@ -75,6 +75,23 @@ plotbar <- function(meansdf, x="variable", dvlabel, fill, filebase)
 plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable", y, fill, rows=NULL, xlabel, filebase)
 {
   #print(meansDF)
+  if (length(plothash[["combine"]]) > 1) {
+    # make a new variable, which is named by joining all parts of "combine", e.g. "body.sync"
+    newvar <- paste(plothash[["combine"]], collapse=".")
+
+    # Set the value to be the combination of other variables, the value of "combine", e.g. c("body", "sync")
+    # would make Body.Synchronous, Body.Asynchronous etc.
+    command <- paste("summaryDF$", newvar, " <- paste(", sep="")
+    command <- paste(command, "summaryDF$", paste(plothash[["combine"]], collapse=", summaryDF$"), ", sep=\".\")", sep="")
+    #cat(paste(command, "\n", sep=""))
+    eval(parse(text=command))
+
+    # Don't allow for alphabetical order, take levels from the order they appear in DF
+    #cat("summaryDF[,newvar] <- factor(summaryDF[,newvar], levels=unique(summaryDF[,newvar]))\n")
+    summaryDF[,newvar] <- factor(summaryDF[,newvar], levels=unique(summaryDF[,newvar]))
+  }
+
+
   if (plothash[["type"]] == "bar") {
 
     # Create separate vars for these cos we want to set defaults and don't want to store them in plothash (which I think is passed by reference, see ?hash)
@@ -203,6 +220,9 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     }
     cat("\n")
   }
+
+  # summaryDF is sometimes changed, e.g. combine
+  return(summaryDF)
 }
 
 plotwivbiv <- function(meansdf, dvlabel)
@@ -242,8 +262,11 @@ ploteng <- function(DF, meansDF, summaryDF, fit=NULL, plothashes, nosave=F)
 {
   for (i in plothashes) {
     #if (i[["type"]] == "box")
-    plotit(DF, meansDF, summaryDF, fit, i, nosave)
+    newsummaryDF <- plotit(DF, meansDF, summaryDF, fit, i, nosave)
   }
+
+  # For now return the last one
+  return (newsummaryDF)
 }
 
 makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
@@ -330,11 +353,6 @@ plotWithinMult <- function(dv, params, plotPsycho)
   # make the new column factor levels in the same order as they appear in the DF
   for (i in withinIVs) { summarydf[,i] <- factor(summarydf[,i], levels=unique(summarydf[,i])) }
 
-  # hack: can't think of a good way to combine columns depending on params yet
-  summarydf$bodysync <- paste(summarydf$body, summarydf$sync, sep=".")
-  summarydf$bodysync <- factor(summarydf$bodysync, levels=c("Body.Synchronous", "Body.Asynchronous", "Object.Synchronous", "Object.Asynchronous"), labels=c("BS", "BAS", "OS", "OAS"))
-  # end hack
-
   cat("sync levels\n")
   print(levels(summarydf$sync))
   cat("Summary DF\n")
@@ -418,7 +436,8 @@ plotWithinMult <- function(dv, params, plotPsycho)
 
   # assume we have a variable with concatenated conditions:
   #plotbox(DF, withinIVs[1], dv, withinIVs[2], withinIVs[3], xlabel, filebase)
-  ploteng(DF, meansdf, summarydf, fit, plothashes=plothashes, nosave=params$settings$noplotsave)
+  # summarydf may be updated, e.g. combine
+  summarydf <- ploteng(DF, meansdf, summarydf, fit, plothashes=plothashes, nosave=params$settings$noplotsave)
 
   summaryDFs <- list(meansDF=meansdf, summaryDF=summarydf)
 }
