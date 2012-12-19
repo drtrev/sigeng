@@ -185,15 +185,14 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   # TODO tidy this up, most of these options are just ggplot() so can add geom_segment(data=signifDF...) later
 
-  if (plothash[["type"]] == "bar") {
+  # Default: boxplot
+  if (is.null(plothash[["type"]])) plothash[["type"]] <- "boxplot"
 
-    # TODO leave ggplot() blank and do it all below so can add geom_segment(data=signifDF)
-    # TODO note I've already changed fill below to not add if we're using bar here, so should
-    # fill even lower down
-    command <- paste("p <- ggplot()")
+  command <- "p <- ggplot()"
 
-  }else if (plothash[["type"]] == "psycho") {
+  if (plothash[["type"]] == "psycho") {
 
+    # TODO make a list e.g. list(x=plothash[["x"]], y=means) and process like that
     means <- "means"
     stderrs <- "stderrs"
     if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
@@ -205,19 +204,9 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
     if (!is.null(plothash[["colour"]])) command <- paste(command, ", colour=", plothash[["colour"]], sep="")
 
-  }else if (plothash[["type"]] == "crossbar") {
-    
-    command <- paste("p <- ggplot()")
-
-  }else{
-    # Default: boxplot
-    plothash[["type"]] <- "boxplot"
-    command <- paste("p <- ggplot()")
-
   }
-
-  cat(command, "\n")
-  eval(parse(text=command))
+  #cat(command, "\n")
+  #eval(parse(text=command))
 
   #
   ####
@@ -226,7 +215,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   ####
   # Make facet, themes and opts vars etc.
 
-  if (!is.null(plothash[["facet"]])) facet <- paste(" + facet_", plothash[["facet"]], sep="")
+  options <- list()
+  if (!is.null(plothash[["facet"]])) facet <- paste0(" + facet_", plothash[["facet"]])
   else facet <- NULL
   #else facet <- paste("facet_grid(. ~ ", x, ")", sep="")
   if (!is.null(plothash[["theme"]])) theme <- paste(" + theme_", plothash[["theme"]], sep="")
