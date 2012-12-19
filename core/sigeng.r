@@ -187,12 +187,10 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
     # Same again for main DF, because that's also used for some plots
     DF[,newvar] <- do.call(paste, c(DF[ , plothash[["combine"]] ], sep=".") )
-    # Don't allow for alphabetical order, take levels from the order they appear in DF
     DF[,newvar] <- factor(DF[,newvar], levels=unique(DF[,newvar]))
 
     # Same again for meansDF, because that's also used for some plots
     meansDF[,newvar] <- do.call(paste, c(meansDF[ , plothash[["combine"]] ], sep=".") )
-    # Don't allow for alphabetical order, take levels from the order they appear in DF
     meansDF[,newvar] <- factor(meansDF[,newvar], levels=unique(meansDF[,newvar]))
   }
 
@@ -212,22 +210,10 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   # Default: boxplot
   if (is.null(plothash[["type"]])) plothash[["type"]] <- "boxplot"
 
-  command <- "p <- ggplot()"
+  command <- "myplot <- ggplot()"
 
   if (plothash[["type"]] == "psycho") {
-
-    # TODO make a list e.g. list(x=plothash[["x"]], y=means) and process like that
-    means <- "means"
-    stderrs <- "stderrs"
-    if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
-    if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
-    command <- paste("p <- ggplot() + geom_point(data=meansDF, aes(x=", plothash[["x"]], ", y=", means, sep="")
-
-    if (is.null(plothash[["fill"]])) command <- paste(command, "))", sep="")
-    else command <- paste(command, ", fill=", plothash[["fill"]], "))", sep="")
-
-    if (!is.null(plothash[["colour"]])) command <- paste(command, ", colour=", plothash[["colour"]], sep="")
-
+ 
   }
   #cat(command, "\n")
   #eval(parse(text=command))
@@ -240,15 +226,6 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   # Make facet, themes and opts vars etc.
 
   options <- makeOptions(plothash, c("facet", "theme", "scale_fill"), addname=T)
-
-  #if (!is.null(plothash[["facet"]])) facet <- paste0(" + facet_", plothash[["facet"]])
-  #else facet <- NULL
-  ##else facet <- paste("facet_grid(. ~ ", x, ")", sep="")
-  #if (!is.null(plothash[["theme"]])) theme <- paste(" + theme_", plothash[["theme"]], sep="")
-  #else theme <- NULL
-
-  #if (!is.null(plothash[["scale_fill"]])) scale_fill <- paste(" + scale_fill_", plothash[["scale_fill"]], sep="")
-  #else scale_fill <- NULL
 
   # TODO opts deprecated
   if (!is.null(plothash[["opts"]]))
@@ -278,34 +255,47 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   ####
   # Make plot specific command, e.g. geom_boxplot
 
-  errorbar <- NULL
-  legend <- NULL
-
   if (plothash[["type"]] == "bar") {
     means <- "means"
     stderrs <- "stderrs"
     if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
     if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
-    aescommand <- paste("aes(x=", plothash[["x"]], ", y=", means, sep="")
-    if (!is.null(plothash[["fill"]])) aescommand <- paste(aescommand, ", fill=", plothash[["fill"]], sep="")
-    aescommand <- paste(aescommand, ")", sep="")
+    mapping <- list(x=plothash[["x"]], y=means)
+    if (!is.null(plothash[["fill"]])) mapping <- c(mapping, fill=plothash[["fill"]])
 
     dodge <- position_dodge(width=0.9)
-    plottype <- paste("geom_bar(data=meansDF, mapping=", aescommand, ", position=dodge, stat=\"identity\")", sep="")
-    #if (!is.null(plothash[["stderrs"]])) {
-      command <- paste("limits <- aes(x=", plothash[["x"]], ", y=", means, ", ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
-      cat(command, "\n")
-      eval(parse(text=command))
-      errorbar <- " + geom_errorbar(data=meansDF, mapping=limits, width=0.1, position=dodge)"
-    #}
+    mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
+    plottype <- list(paste("geom_bar(data=meansDF, mapping=aes(", mappingstr, "), position=dodge, stat=\"identity\")", sep=""))
+
+    # TODO remove x and y mappings
+    mapping <- list(ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
+    #command <- paste("limits <- aes(x=", plothash[["x"]], ", y=", means, ", ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
+    #cat(command, "\n")
+    #eval(parse(text=command))
+    mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
+    plottype <- c(plottype, paste0("geom_errorbar(data=meansDF, mapping=aes(", mappingstr, "), width=0.1, position=dodge)"))
   }else if (plothash[["type"]] == "point") {
     plottype <- "geom_point()"
   }else if (plothash[["type"]] == "psycho") {
 
+    means <- "means"
+    stderrs <- "stderrs"
+    if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
+    if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
+
+    mapping <- list(x=plothash[["x"]], y=means)
+
+    if (!is.null(plothash[["fill"]])) mapping <- c(mapping, list(fill=plothash[["fill"]]))
+    if (!is.null(plothash[["colour"]])) mapping <- c(mapping, list(colour=plothash[["colour"]]))
+
+    #plottype <- paste("geom_point(data=meansDF, aes(x=", plothash[["x"]], ", y=", means, sep="")
+    mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
+    plottype <- paste0("geom_point(data=meansDF, mapping=aes(", mappingstr, "))")
+
     # the ../psychophysics/psychophysics.r function should give a fit with x and y
     # and another function should join together different conditions with a variable 'cond'
     # so we have already x, y, cond
-    plottype <- "geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond))"
+    plottype <- c(plottype, "geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond))")
 
   }else if (plothash[["type"]] == "crossbar") {
 
@@ -355,9 +345,10 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   # Join plot commands together, and adjust the scale
   
   #command <- paste("myplot <- p + ", plottype, errorbar, facet, sep="")
-  command <- paste("myplot <- p + ", plottype, errorbar, sep="")
+  command <- paste(command, paste(plottype, collapse=" + "), sep=" + ")
 
   if (plothash[["type"]] == "psycho") {
+    # TODO just add to options
     command <- paste(command, " + scale_x_continuous(name=\"", plothash[["xlab"]],
                               "\", labels=c(\"", paste(plothash[["xticlabs"]], collapse='","', sep=""), "\"),", sep="")
     # without quote marks around breaks, i.e. continuous var not factor
