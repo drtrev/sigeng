@@ -157,26 +157,17 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
     # Set the value to be the combination of other variables, the value of "combine", e.g. c("body", "sync")
     # would make Body.Synchronous, Body.Asynchronous etc.
-    command <- paste("summaryDF$", newvar, " <- paste(", sep="")
-    command <- paste(command, "summaryDF$", paste(plothash[["combine"]], collapse=", summaryDF$"), ", sep=\".\")", sep="")
-    eval(parse(text=command))
-
+    summaryDF[,newvar] <- do.call(paste, c(summaryDF[ , plothash[["combine"]] ], sep=".") )
     # Don't allow for alphabetical order, take levels from the order they appear in DF
     summaryDF[,newvar] <- factor(summaryDF[,newvar], levels=unique(summaryDF[,newvar]))
 
     # Same again for main DF, because that's also used for some plots
-    command <- paste("DF$", newvar, " <- paste(", sep="")
-    command <- paste(command, "DF$", paste(plothash[["combine"]], collapse=", DF$"), ", sep=\".\")", sep="")
-    eval(parse(text=command))
-
+    DF[,newvar] <- do.call(paste, c(DF[ , plothash[["combine"]] ], sep=".") )
     # Don't allow for alphabetical order, take levels from the order they appear in DF
     DF[,newvar] <- factor(DF[,newvar], levels=unique(DF[,newvar]))
 
     # Same again for meansDF, because that's also used for some plots
-    command <- paste("meansDF$", newvar, " <- paste(", sep="")
-    command <- paste(command, "meansDF$", paste(plothash[["combine"]], collapse=", meansDF$"), ", sep=\".\")", sep="")
-    eval(parse(text=command))
-
+    meansDF[,newvar] <- do.call(paste, c(meansDF[ , plothash[["combine"]] ], sep=".") )
     # Don't allow for alphabetical order, take levels from the order they appear in DF
     meansDF[,newvar] <- factor(meansDF[,newvar], levels=unique(meansDF[,newvar]))
   }
@@ -312,7 +303,15 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     plottype <- paste(plottype, crossbar, ")", sep="") # end geom_crossbar
 
     # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
-    if (!is.null(plothash[["legend"]]) && plothash[["legend"]] == "boxplot") legend <- paste(" + geom_boxplot(", crossbar, ")", sep="")
+    if (!is.null(plothash[["legend"]])) {
+      if (plothash[["legend"]] == "boxplot") legend <- paste(" + geom_boxplot(", crossbar, ")", sep="")
+      if (plothash[["legend"]] == "bar") {
+        legend <- " + geom_bar(data=summaryDF, mapping=aes(x=0, y=0"
+        if (!is.null(plothash[["fill"]])) legend <- sprintf("%s, fill=%s", legend, plothash[["fill"]])
+        legend <- paste(legend, "), stat=\"identity\", width=0)", sep="")
+      }
+      if (plothash[["legend"]] == "boxplot") legend <- paste(" + geom_", plothash[["legend"]], "(", crossbar, ")", sep="")
+    }
   }else{
     plottype <- paste("geom_boxplot(data=DF, mapping=aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
     if (!is.null(plothash[["fill"]])) plottype <- paste(plottype, ", fill=", plothash[["fill"]], sep="")
