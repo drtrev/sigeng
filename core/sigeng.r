@@ -144,6 +144,30 @@ plotbar <- function(meansdf, x="variable", dvlabel, fill, filebase)
   #ggsave(file=paste("/tmp/", filebase, ".eps", sep=""), width=10, height=7)
 }
 
+makeOptions <- function(plothash, optnames, addname=F)
+  # Take optnames e.g. facet, theme, scale_fill
+  # And produce a list, e.g. list(facet="facet_grid(...)", ...)
+{
+
+  if (!addname)
+  {
+    # grab relevant options
+    options <- plothash[optnames]
+
+    # remove na's
+    options <- options[!is.na(names(options))]
+  }
+  else
+  {
+    # add name to value, so it becomes facet_grid(...) etc.
+    options <- paste(optnames, plothash[optnames], sep="_")
+    names(options) <- optnames
+    options <- as.list(options)
+  }
+
+  return(options)
+}
+
 plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable", y, fill, rows=NULL, xlabel, filebase)
 {
   #print(meansDF)
@@ -215,27 +239,37 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   ####
   # Make facet, themes and opts vars etc.
 
-  options <- list()
-  if (!is.null(plothash[["facet"]])) facet <- paste0(" + facet_", plothash[["facet"]])
-  else facet <- NULL
-  #else facet <- paste("facet_grid(. ~ ", x, ")", sep="")
-  if (!is.null(plothash[["theme"]])) theme <- paste(" + theme_", plothash[["theme"]], sep="")
-  else theme <- NULL
+  options <- makeOptions(plothash, c("facet", "theme", "scale_fill"), addname=T)
 
-  if (!is.null(plothash[["scale_fill"]])) scale_fill <- paste(" + scale_fill_", plothash[["scale_fill"]], sep="")
-  else scale_fill <- NULL
+  #if (!is.null(plothash[["facet"]])) facet <- paste0(" + facet_", plothash[["facet"]])
+  #else facet <- NULL
+  ##else facet <- paste("facet_grid(. ~ ", x, ")", sep="")
+  #if (!is.null(plothash[["theme"]])) theme <- paste(" + theme_", plothash[["theme"]], sep="")
+  #else theme <- NULL
+
+  #if (!is.null(plothash[["scale_fill"]])) scale_fill <- paste(" + scale_fill_", plothash[["scale_fill"]], sep="")
+  #else scale_fill <- NULL
 
   # TODO opts deprecated
-  myopts <- NULL
-  if (!is.null(plothash[["opts"]])) myopts <- paste(" + opts(", plothash[["opts"]], ")", sep="")
+  if (!is.null(plothash[["opts"]]))
+  {
+    myopts <- paste("opts(", plothash[["opts"]], ")", sep="")
+    options <- c(options, myopts)
+  }
 
-  signif <- NULL
-  #if (!is.null(plothash[["signif"]])) signif <- paste(" + geom_segment(", plothash[["signif"]], ")", sep="")
-  if (!is.null(signifDFs)) signif <- " + geom_segment(data=signifDFs$signifDF, aes(x=x, y=y, xend=xend, yend=yend))"
+  # This is set with the sig option
+  if (!is.null(signifDFs))
+  {
+    signif <- "geom_segment(data=signifDFs$signifDF, aes(x=x, y=y, xend=xend, yend=yend))"
+    options <- c(options, signif)
+  }
 
-  text <- NULL
-  #if (!is.null(plothash[["text"]])) text <- paste(" + geom_text(", plothash[["text"]], ")", sep="")
-  if (!is.null(signifDFs)) text <- " + geom_text(data=signifDFs$textDF, mapping=aes(x=x, y=y, label=label))"
+  # Text also comes from the sig option
+  if (!is.null(signifDFs))
+  {
+    text <- "geom_text(data=signifDFs$textDF, mapping=aes(x=x, y=y, label=label))"
+    options <- c(options, text)
+  }
 
   #
   ####
@@ -294,13 +328,14 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
     # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
     if (!is.null(plothash[["legend"]])) {
-      if (plothash[["legend"]] == "boxplot") legend <- paste(" + geom_boxplot(", crossbar, ")", sep="")
+      if (plothash[["legend"]] == "boxplot") legend <- paste("geom_boxplot(", crossbar, ")", sep="")
       if (plothash[["legend"]] == "bar") {
-        legend <- " + geom_bar(data=summaryDF, mapping=aes(x=0, y=0"
+        legend <- "geom_bar(data=summaryDF, mapping=aes(x=0, y=0"
         if (!is.null(plothash[["fill"]])) legend <- sprintf("%s, fill=%s", legend, plothash[["fill"]])
         legend <- paste(legend, "), stat=\"identity\", width=0)", sep="")
       }
-      if (plothash[["legend"]] == "boxplot") legend <- paste(" + geom_", plothash[["legend"]], "(", crossbar, ")", sep="")
+      if (plothash[["legend"]] == "boxplot") legend <- paste("geom_", plothash[["legend"]], "(", crossbar, ")", sep="")
+      options <- c(options, legend)
     }
   }else{
     plottype <- paste("geom_boxplot(data=DF, mapping=aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
@@ -319,7 +354,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   ####
   # Join plot commands together, and adjust the scale
   
-  command <- paste("myplot <- p + ", plottype, errorbar, facet, sep="")
+  #command <- paste("myplot <- p + ", plottype, errorbar, facet, sep="")
+  command <- paste("myplot <- p + ", plottype, errorbar, sep="")
 
   if (plothash[["type"]] == "psycho") {
     command <- paste(command, " + scale_x_continuous(name=\"", plothash[["xlab"]],
@@ -345,7 +381,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     command <- paste(command, ")", sep="")
   }
 
-  command <- paste(command, scale_fill, signif, text, theme, myopts, legend, sep="")
+  command <- paste(c(command, options), collapse=" + ")
+  #command <- paste(command, scale_fill, signif, text, theme, myopts, legend, sep="")
   cat(command, "\n")
   eval(parse(text=command))
 
