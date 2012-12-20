@@ -339,6 +339,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   }else{
 
     mapping <- aes_string(x=plothash[["x"]], y=plothash[["y"]], fill=plothash[["fill"]])
+    layers <- geom_boxplot(data=DF, mapping=mapping, width=as.numeric(plothash[["width"]]))
     
     #plottype <- paste("geom_boxplot(data=DF, mapping=aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
     #if (!is.null(plothash[["fill"]])) plottype <- paste(plottype, ", fill=", plothash[["fill"]], sep="")
