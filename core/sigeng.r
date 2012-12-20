@@ -149,31 +149,52 @@ makeOptions <- function(plothash, optnames, addname=F)
   # And produce a list, e.g. list(facet="facet_grid(...)", ...)
 {
 
-  if (!addname)
-  {
-    # grab relevant options
-    options <- plothash[optnames]
+  # grab relevant options
+  options <- plothash[optnames]
 
-    # remove na's
-    options <- options[!is.na(names(options))]
-  }
-  else
+  # remove na's
+  options <- options[!is.na(names(options))]
+
+  # remove null's
+  options <- options[!sapply(options, is.null)]
+
+  if (addname)
   {
     # add name to value, so it becomes facet_grid(...) etc.
-    options <- paste(optnames, plothash[optnames], sep="_")
-    names(options) <- optnames
-    options <- as.list(options)
+    options2 <- paste(names(options), options, sep="_")
+    names(options2) <- names(options)
+    options <- as.list(options2)
   }
 
   return(options)
+}
+
+# Inspired by http://stackoverflow.com/questions/3737619/how-can-i-pass-a-ggplot2-aesthetic-from-a-variable
+# and aes_string
+aes_list <- function(mapping)
+{
+  mapping[sapply(mapping, is.null)] <- "NULL"
+  parsed <- lapply(mapping, function(x) parse(text = x)[[1]])
+  structure(parsed, class = "uneval")
 }
 
 plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable", y, fill, rows=NULL, xlabel, filebase)
 {
   #print(meansDF)
 
+  # This function should be called with an individual plothash and it plots as follows:
+
+  # 1. Combine columns if requested, updating summaryDFs as appropriate
+  # 2. Prepare signifDFs (calcSignifDF)
+  # 3. Make layers depending on plottype, e.g. bar makes geom_bar and geom_errorbar
+  # 4. Add on user defined layers, e.g. facet_grid(~ ques)
+  # 5. Evaluate and plot
+
+  # NB: 'layers' stores a list of evaluated layers, e.g. geom_boxplot()
+  #     'plotOptions' stores a list of unevaluated strings, e.g. "scale_x_discrete(...)" which could come from the user
+
   ####
-  # Prepare summary DFs and signifDF
+  # 1. Prepare summary DFs
 
   if (length(plothash[["combine"]]) > 1) {
     # make a new variable, which is named by joining all parts of "combine", e.g. "body.sync"
@@ -194,69 +215,29 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     meansDF[,newvar] <- factor(meansDF[,newvar], levels=unique(meansDF[,newvar]))
   }
 
+  ####
+  # 2. Prepare signifDF
+
   signifDFs <- NULL
   if (!is.null(plothash[["sig"]])) signifDFs <- calcSignifDF(summaryDF, plothash[["sig"]])
 
-  #
-  ####
 
   ####
-  # Start the plot
+  # 3. Make layers
 
-  cat("Plot:\n")
-
-  # TODO tidy this up, most of these options are just ggplot() so can add geom_segment(data=signifDF...) later
+  # First start with plottype specific layers
+  layers <- list()
+  plotOptions <- list()
 
   # Default: boxplot
   if (is.null(plothash[["type"]])) plothash[["type"]] <- "boxplot"
 
-  command <- "myplot <- ggplot()"
+  # Default: width
+  if (is.null(plothash[["width"]])) plothash[["width"]] <- "0.9" # Confirmed default for boxplot
 
-  if (plothash[["type"]] == "psycho") {
- 
-  }
-  #cat(command, "\n")
-  #eval(parse(text=command))
-
-  #
-  ####
-
-
-  ####
-  # Make facet, themes and opts vars etc.
-
-  options <- makeOptions(plothash, c("facet", "theme", "scale_fill"), addname=T)
-
-  # TODO opts deprecated
-  if (!is.null(plothash[["opts"]]))
-  {
-    myopts <- paste("opts(", plothash[["opts"]], ")", sep="")
-    options <- c(options, myopts)
-  }
-
-  # This is set with the sig option
-  if (!is.null(signifDFs))
-  {
-    signif <- "geom_segment(data=signifDFs$signifDF, aes(x=x, y=y, xend=xend, yend=yend))"
-    options <- c(options, signif)
-  }
-
-  # Text also comes from the sig option
-  if (!is.null(signifDFs))
-  {
-    text <- "geom_text(data=signifDFs$textDF, mapping=aes(x=x, y=y, label=label))"
-    options <- c(options, text)
-  }
-
-  #
-  ####
-
-
-  ####
-  # Make plot specific command, e.g. geom_boxplot
-
+  # TODO could make these separate functions
   if (plothash[["type"]] == "bar") {
-    means <- "means"
+    means <- "means" # default variable names, can be overriden with plothash options
     stderrs <- "stderrs"
     if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
     if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
@@ -264,18 +245,29 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     if (!is.null(plothash[["fill"]])) mapping <- c(mapping, fill=plothash[["fill"]])
 
     dodge <- position_dodge(width=0.9)
-    mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
-    plottype <- list(paste("geom_bar(data=meansDF, mapping=aes(", mappingstr, "), position=dodge, stat=\"identity\")", sep=""))
 
-    # TODO remove x and y mappings
-    mapping <- list(ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
-    #command <- paste("limits <- aes(x=", plothash[["x"]], ", y=", means, ", ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
-    #cat(command, "\n")
-    #eval(parse(text=command))
-    mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
-    plottype <- c(plottype, paste0("geom_errorbar(data=meansDF, mapping=aes(", mappingstr, "), width=0.1, position=dodge)"))
+    # Here is how you can do it by converting mapping to a str and evaluating the code
+    #mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
+    #plottype <- list(paste("geom_bar(data=meansDF, mapping=aes(", mappingstr, "), position=dodge, stat=\"identity\")", sep=""))
+
+    #layers <- geom_bar(data=meansDF, mapping=aes_list(mapping), stat="identity", position=dodge)
+    mapping <- aes_string(x=plothash[["x"]], y=means, fill=plothash[["fill"]])
+    layers <- geom_bar(data=meansDF, mapping=mapping, stat="identity", position=dodge)
+
+    ##command <- paste("limits <- aes(x=", plothash[["x"]], ", y=", means, ", ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
+    ##cat(command, "\n")
+    ##eval(parse(text=command))
+    #mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
+    #plottype <- c(plottype, paste0("geom_errorbar(data=meansDF, mapping=aes(", mappingstr, "), width=0.1, position=dodge)"))
+
+
+    #mapping <- list(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
+    mapping <- aes_string(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
+    layers <- c(layers, geom_errorbar(data=meansDF, mapping=mapping, width=0.1, position=dodge))
   }else if (plothash[["type"]] == "point") {
-    plottype <- "geom_point()"
+    #plottype <- "geom_point()"
+    mapping <- aes_string(x=plothash[["x"]], y=plothash[["y"]], colour=plothash[["colour"]], fill=plothash[["fill"]])
+    layers <- geom_point(data=DF, mapping=mapping)
   }else if (plothash[["type"]] == "psycho") {
 
     means <- "means"
@@ -283,19 +275,23 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
     if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
 
-    mapping <- list(x=plothash[["x"]], y=means)
+    mapping <- aes_string(x=plothash[["x"]], y=means, fill=plothash[["fill"]], colour=plothash[["colour"]])
+    layers <- geom_point(data=meansDF, mapping=mapping)
+    layers <- c(layers, geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond)))
 
-    if (!is.null(plothash[["fill"]])) mapping <- c(mapping, list(fill=plothash[["fill"]]))
-    if (!is.null(plothash[["colour"]])) mapping <- c(mapping, list(colour=plothash[["colour"]]))
+    #mapping <- list(x=plothash[["x"]], y=means)
 
-    #plottype <- paste("geom_point(data=meansDF, aes(x=", plothash[["x"]], ", y=", means, sep="")
-    mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
-    plottype <- paste0("geom_point(data=meansDF, mapping=aes(", mappingstr, "))")
+    #if (!is.null(plothash[["fill"]])) mapping <- c(mapping, list(fill=plothash[["fill"]]))
+    #if (!is.null(plothash[["colour"]])) mapping <- c(mapping, list(colour=plothash[["colour"]]))
+
+    ##plottype <- paste("geom_point(data=meansDF, aes(x=", plothash[["x"]], ", y=", means, sep="")
+    #mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
+    #plottype <- paste0("geom_point(data=meansDF, mapping=aes(", mappingstr, "))")
 
     # the ../psychophysics/psychophysics.r function should give a fit with x and y
     # and another function should join together different conditions with a variable 'cond'
     # so we have already x, y, cond
-    plottype <- c(plottype, "geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond))")
+    #plottype <- c(plottype, "geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond))")
 
   }else if (plothash[["type"]] == "crossbar") {
 
@@ -304,78 +300,148 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     X3rdQu <- "X3rd.Qu."
     if (!is.null(plothash[["median"]])) median <- plothash[["median"]]
 
-    plottype <- "geom_crossbar("
+    #plottype <- "geom_crossbar("
 
-    crossbar <- paste("data=summaryDF, mapping=aes(x=", plothash[["x"]], ", y=", median, ", ymin=", X1stQu, ", ymax=", X3rdQu, sep="")
+    mapping <- aes_string(x=plothash[["x"]], y=median, ymin=X1stQu, ymax=X3rdQu, fill=plothash[["fill"]])
+    #cat("Width:\n")
+    #print(as.numeric(plothash[["width"]]))
+    layers <- geom_crossbar(data=summaryDF, mapping=mapping, width=as.numeric(plothash[["width"]]))
 
-    if (!is.null(plothash[["fill"]])) crossbar <- paste(crossbar, ", fill=", plothash[["fill"]], sep="")
+    #crossbar <- paste("data=summaryDF, mapping=aes(x=", plothash[["x"]], ", y=", median, ", ymin=", X1stQu, ", ymax=", X3rdQu, sep="")
 
-    crossbar <- paste(crossbar, ")", sep="") # end aes
+    #if (!is.null(plothash[["fill"]])) crossbar <- paste(crossbar, ", fill=", plothash[["fill"]], sep="")
 
-    if (!is.null(plothash[["width"]])) crossbar <- paste(crossbar, ", width=", plothash[["width"]], sep="")
+    #crossbar <- paste(crossbar, ")", sep="") # end aes
 
-    plottype <- paste(plottype, crossbar, ")", sep="") # end geom_crossbar
+    #if (!is.null(plothash[["width"]])) crossbar <- paste(crossbar, ", width=", plothash[["width"]], sep="")
+
+    #plottype <- paste(plottype, crossbar, ")", sep="") # end geom_crossbar
 
     # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
     if (!is.null(plothash[["legend"]])) {
-      if (plothash[["legend"]] == "boxplot") legend <- paste("geom_boxplot(", crossbar, ")", sep="")
+      if (plothash[["legend"]] == "boxplot") layers <- c(layers, geom_boxplot(data=summaryDF, mapping=mapping, width=0))
       if (plothash[["legend"]] == "bar") {
-        legend <- "geom_bar(data=summaryDF, mapping=aes(x=0, y=0"
-        if (!is.null(plothash[["fill"]])) legend <- sprintf("%s, fill=%s", legend, plothash[["fill"]])
-        legend <- paste(legend, "), stat=\"identity\", width=0)", sep="")
+        #layers <- c(layers, geom_bar(data=summaryDF, mapping=aes_string(x=0, y=0, fill=plothash[["fill"]]), position="dodge", stat="identity", width=0))
+        if (is.null(plothash[["ylimits"]])) 
+        {
+          maxs <- summaryDF[,median]
+          if (!is.null(signifDFs)) maxs <- c(maxs, signifDFs$signifDF$y+0.1)
+          plothash[["ylimits"]]=c(min(summaryDF[,median]), max(maxs))
+        }
+        plotOptions <- c(plotOptions, 'geom_bar(data=summaryDF, mapping=aes_string(x=1, y=0, fill=plothash[["fill"]]), position="dodge", stat="identity", width=0)')
+        #legend <- "geom_bar(data=summaryDF, mapping=aes(x=0, y=0"
+        #if (!is.null(plothash[["fill"]])) legend <- sprintf("%s, fill=%s", legend, plothash[["fill"]])
+        #legend <- paste(legend, "), stat=\"identity\", width=0)", sep="")
       }
-      if (plothash[["legend"]] == "boxplot") legend <- paste("geom_", plothash[["legend"]], "(", crossbar, ")", sep="")
-      options <- c(options, legend)
+      #if (plothash[["legend"]] == "boxplot") legend <- paste("geom_", plothash[["legend"]], "(", crossbar, ")", sep="")
+      #options <- c(options, legend)
     }
   }else{
-    plottype <- paste("geom_boxplot(data=DF, mapping=aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
-    if (!is.null(plothash[["fill"]])) plottype <- paste(plottype, ", fill=", plothash[["fill"]], sep="")
-    plottype <- paste(plottype, ")", sep="") # end aes
-    if (!is.null(plothash[["width"]])) plottype <- paste(plottype, ", width=", plothash[["width"]], sep="")
-    plottype <- paste(plottype, ")", sep="") # end geom_boxplot
+
+    mapping <- aes_string(x=plothash[["x"]], y=plothash[["y"]], fill=plothash[["fill"]])
+    
+    #plottype <- paste("geom_boxplot(data=DF, mapping=aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
+    #if (!is.null(plothash[["fill"]])) plottype <- paste(plottype, ", fill=", plothash[["fill"]], sep="")
+    #plottype <- paste(plottype, ")", sep="") # end aes
+    #if (!is.null(plothash[["width"]])) plottype <- paste(plottype, ", width=", plothash[["width"]], sep="")
+    #plottype <- paste(plottype, ")", sep="") # end geom_boxplot
   }
   #if (!is.null(plothash[["xticlabs"]]) xticlabs <- plothash[["xticlabs"]]
+
+  # Then add layers that are usually the same, with some checks on plottype where necessary
+  
+  if (plothash[["type"]] == "psycho") {
+    # TODO just add to options
+    #command <- paste(command, " + scale_x_continuous(name=\"", plothash[["xlab"]],
+    #                          "\", labels=c(\"", paste(plothash[["xticlabs"]], collapse='","', sep=""), "\"),", sep="")
+    # without quote marks around breaks, i.e. continuous var not factor
+    #command <- paste(command, " breaks=c(", paste(plothash[["xticbreaks"]], collapse=',', sep=""), "))", sep="")
+
+    # Continuous
+    plotOptions <- c(plotOptions, "scale_x_continuous(name=plothash[[\"xlab\"]], labels=plothash[[\"xticlabs\"]], breaks=plothash[[\"xticbreaks\"]])")
+  }else{
+    # Discrete
+    #command <- paste(command, " + scale_x_discrete(name=\"", plothash[["xlab"]],
+    #                          "\", labels=c(\"", paste(plothash[["xticlabs"]], collapse='","', sep=""), "\"),", sep="")
+    #command <- paste(command, " breaks=c(\"", paste(plothash[["xticbreaks"]], collapse='","', sep=""), "\"))", sep="")
+
+    plotOptions <- c(plotOptions, "scale_x_discrete(name=plothash[[\"xlab\"]], labels=plothash[[\"xticlabs\"]], breaks=plothash[[\"xticbreaks\"]])")
+  }
+
+  if (is.null(plothash[["scale_fill"]])) {
+
+    # Filllab is unique in the sense that it also gets its value from fill
+    #fillparams <- list(name=plothash[["filllab"]], labels=plothash[["filllabs"]], breaks=plothash[["fillbreaks"]])
+    #fillparamsstr <- paste(names(fillparams), fillparams, collapse=", ", sep="=")
+
+    #plotOptions <- c(plotOptions, paste0("scale_fill_discrete(", fillparamsstr, ")")
+
+    cat("Filllabs:\n")
+    print(plothash[["filllabs"]])
+    plotOptions <- c(plotOptions, 'scale_fill_discrete(name=plothash[["filllab"]], labels=plothash[["filllabs"]], breaks=plothash[["fillbreaks"]])')
+
+   #   fillstr <- paste(fillstr, ", 
+    #command <- paste(command, " + scale_fill_discrete(name=\"", plothash[["filllab"]], "\"", sep="")
+    #if (!is.null(plothash[["filllabs"]])) {
+    #  command <- paste(command, ", labels=c(\"", paste(plothash[["filllabs"]], collapse='","', sep=""), "\")", sep="")
+    #  command <- paste(command, ", breaks=c(\"", paste(plothash[["fillbreaks"]], collapse='","', sep=""), "\")", sep="")
+    #}
+    #command <- paste(command, ")", sep="")
+  }
+
+  scaley <- list(name='plothash[["ylab"]]', limits=plothash[["ylimits"]], breaks=plothash[["yticbreaks"]], labels=plothash[["yticlabs"]])
+  scaley <- scaley[!sapply(scaley, function (x) is.null(x))]
+  scaleystr <- paste(names(scaley), scaley, collapse=", ", sep="=")
+  plotOptions <- c(plotOptions, paste0("scale_y_continuous(", scaleystr, ")"))
+
+  ####
+  # 4. Add user defined layers
+
+  plotOptions <- c(plotOptions, makeOptions(plothash, c("facet", "theme", "scale_fill"), addname=T))
+  #layers <- c(layers, lapply(plotOptions, function (x) eval(parse(text=x))))
+
+  # TODO opts deprecated
+  if (!is.null(plothash[["opts"]]))
+  {
+    myopts <- paste("opts(", plothash[["opts"]], ")", sep="")
+    plotOptions <- c(plotOptions, myopts)
+  }
+
+  # This is set with the sig option
+  if (!is.null(signifDFs))
+  {
+    signif <- "geom_segment(data=signifDFs$signifDF, aes(x=x, y=y, xend=xend, yend=yend))"
+    plotOptions <- c(plotOptions, signif)
+  }
+
+  # Text also comes from the sig option
+  if (!is.null(signifDFs))
+  {
+    text <- "geom_text(data=signifDFs$textDF, mapping=aes(x=x, y=y, label=label))"
+    plotOptions <- c(plotOptions, text)
+  }
 
   #
   ####
 
 
 
+
   ####
   # Join plot commands together, and adjust the scale
   
-  #command <- paste("myplot <- p + ", plottype, errorbar, facet, sep="")
-  command <- paste(command, paste(plottype, collapse=" + "), sep=" + ")
+  cat("Plot:\n")
 
-  if (plothash[["type"]] == "psycho") {
-    # TODO just add to options
-    command <- paste(command, " + scale_x_continuous(name=\"", plothash[["xlab"]],
-                              "\", labels=c(\"", paste(plothash[["xticlabs"]], collapse='","', sep=""), "\"),", sep="")
-    # without quote marks around breaks, i.e. continuous var not factor
-    command <- paste(command, " breaks=c(", paste(plothash[["xticbreaks"]], collapse=',', sep=""), "))", sep="")
-  }else{
-    command <- paste(command, " + scale_x_discrete(name=\"", plothash[["xlab"]],
-                              "\", labels=c(\"", paste(plothash[["xticlabs"]], collapse='","', sep=""), "\"),", sep="")
-    command <- paste(command, " breaks=c(\"", paste(plothash[["xticbreaks"]], collapse='","', sep=""), "\"))", sep="")
-  }
+  command <- "myplot <- ggplot()"
 
+  ##command <- paste("myplot <- p + ", plottype, errorbar, facet, sep="")
+  #command <- paste(command, paste(plottype, collapse=" + "), sep=" + ")
+  #command <- paste(command, paste(layers, collapse=" + "))
 
-  command <- paste(command, " + scale_y_continuous(name=\"", plothash[["ylab"]], "\")", sep="")
+  print(plotOptions)
 
-  if (is.null(plothash[["scale_fill"]])) {
-    # Filllab is unique in the sense that it also gets its value from fill
-    command <- paste(command, " + scale_fill_discrete(name=\"", plothash[["filllab"]], "\"", sep="")
-    if (!is.null(plothash[["filllabs"]])) {
-      command <- paste(command, ", labels=c(\"", paste(plothash[["filllabs"]], collapse='","', sep=""), "\")", sep="")
-      command <- paste(command, ", breaks=c(\"", paste(plothash[["fillbreaks"]], collapse='","', sep=""), "\")", sep="")
-    }
-    command <- paste(command, ")", sep="")
-  }
-
-  command <- paste(c(command, options), collapse=" + ")
-  #command <- paste(command, scale_fill, signif, text, theme, myopts, legend, sep="")
-  cat(command, "\n")
-  eval(parse(text=command))
+  #cat(command, "\n")
+  myplot <- ggplot() + layers + lapply(plotOptions, function (x) eval(parse(text=x)))
 
   #
   ####
@@ -468,7 +534,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 0 && length(withinIVs) == 3) {
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[2], x=withinIVs[2], xticlabs=levels(DF[,withinIVs[2]]), xticbreaks=levels(DF[,withinIVs[2]]),
-          ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3],
+          ylab=dv, y=dv, fill=withinIVs[3], filllab=withinIVs[3], filllabs=levels(DF[,withinIVs[3]]), fillbreaks=levels(DF[,withinIVs[3]]),
           facet=paste("grid(. ~ ", withinIVs[1], ")", sep=""), type="bar", scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
@@ -477,7 +543,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 0 && length(withinIVs) == 2) {
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
-          ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
+          ylab=dv, y=dv, fill=withinIVs[2], filllab=withinIVs[2], filllabs=levels(DF[,withinIVs[2]]), fillbreaks=levels(DF[,withinIVs[2]]), scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           facet=NULL, type="bar",
           opts=NULL,
           filenames=filenames))
@@ -683,8 +749,11 @@ doplot <- function(dv, params)
   }else{
     plothashesdef <- makeplothashes(DF, dv, withinIVs, betweenIVs)
     # fix filllab - if not given then use the value from 'fill', otherwise default from makeplothashes will not match
+    # same for filllabs and fillbreaks
     for (i in 1:length(plothashes)) {
       if (is.null(plothashes[[i]][["filllab"]])) plothashes[[i]][["filllab"]] <- plothashes[[i]][["fill"]]
+      if (is.null(plothashes[[i]][["filllabs"]])) plothashes[[i]][["filllabs"]] <- levels(DF[,plothashes[[i]][["fill"]]])
+      if (is.null(plothashes[[i]][["filllabbreaks"]])) plothashes[[i]][["fillbreaks"]] <- levels(DF[,plothashes[[i]][["fill"]]])
     }
 
     # modify the defaults
