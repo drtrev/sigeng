@@ -68,6 +68,9 @@ calcSignifDF <- function(DF, sig)
 #)
 # Return signifDF, i.e. x, y, xend, yend, quest=...
 {
+  signifDF <- NULL
+  textDF <- NULL
+
   # For each significant thing
   for (s in sig) {
 
@@ -90,35 +93,45 @@ calcSignifDF <- function(DF, sig)
       DFcut <- DF
     }
 
-    # Get start point, i.e. x pos where var is first value
-    firstvalue  <- s[["first"]][[xvariable]]
-    secondvalue <- s[["second"]][[xvariable]]
+    if (nrow(DFcut) > 0) {
+      # Get start point, i.e. x pos where var is first value
+      firstvalue  <- s[["first"]][[xvariable]]
+      secondvalue <- s[["second"]][[xvariable]]
 
-    # Find where this is in DF
-    x <- which(levels(DFcut[,xvariable]) == firstvalue)
-    xend <- which(levels(DFcut[,xvariable]) == secondvalue)
+      if (!(xvariable %in% colnames(DFcut))) stop(paste0("calcSignifDF error: first variable '", xvariable,"' not found in DF."))
 
-    # Make a signifDF based on this
-    #  2>-------3
-    #  |        V
-    #  |        |
-    #  ^
-    #  1
+      # Find where this is in DF
+      x <- which(levels(DFcut[,xvariable]) == firstvalue)
+      xend <- which(levels(DFcut[,xvariable]) == secondvalue)
 
-    #          1  2  3                    1            2     3
-    xs    <- c(x, x, xend);    ys    <- c(ypos-height, ypos, ypos)
-    xends <- c(x, xend, xend); yends <- c(ypos,        ypos, ypos-height)
-    
+      # Make a signifDF based on this
+      #  2>-------3
+      #  |        V
+      #  |        |
+      #  ^
+      #  1
 
-    # TODO append don't overwrite
-    signifDF <- data.frame(x=xs, y=ys, xend=xends, yend=yends, tempvar=rep(cutvalue, 3))
-    signifDF <- rename(signifDF, c(tempvar=cutname))
+      #          1  2  3                    1            2     3
+      xs    <- c(x, x, xend);    ys    <- c(ypos-height, ypos, ypos)
+      xends <- c(x, xend, xend); yends <- c(ypos,        ypos, ypos-height)
+      
 
-    # Store text position, i.e. x, y, cutname, label
-    text <- "****"
-    if (!is.null(s[["text"]])) text <- s[["text"]]
-    textDF <- data.frame(x=mean(c(x, xend)), y=ypos + 0.1, tempvar=cutvalue, label=text)
-    textDF <- rename(textDF, c(tempvar=cutname))
+      temp <- data.frame(x=xs, y=ys, xend=xends, yend=yends, tempvar=rep(cutvalue, 3))
+      temp <- rename(temp, c(tempvar=cutname))
+      signifDF <- rbind(signifDF, temp)
+
+      # Store text position, i.e. x, y, cutname, label
+      text <- "****"
+      if (!is.null(s[["text"]])) text <- s[["text"]]
+      if (!is.null(s[["p"]])) {
+        if (s[["p"]] <= 0.05) text <- "*"
+        if (s[["p"]] <= 0.01) text <- "**"
+        if (s[["p"]] <= 0.001) text <- "***"
+      }
+      temp <- data.frame(x=mean(c(x, xend)), y=ypos + 0.1, tempvar=cutvalue, label=text)
+      temp <- rename(temp, c(tempvar=cutname))
+      textDF <- rbind(textDF, temp)
+    }
   }
 
   signifDFs <- list(signifDF=signifDF, textDF=textDF)
@@ -221,6 +234,10 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   signifDFs <- NULL
   if (!is.null(plothash[["sig"]])) signifDFs <- calcSignifDF(summaryDF, plothash[["sig"]])
 
+  cat("signifDF\n")
+  print(signifDFs$signifDF)
+  print(signifDFs$textDF)
+
 
   ####
   # 3. Make layers
@@ -319,15 +336,22 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
     # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
     if (!is.null(plothash[["legend"]])) {
+      # If ylimits does not cover area used by geom_segment (i.e. signifDFs) then the whole graph won't display.
+      # So we take into account the users specification, but take min/max also including the signif values.
+      mins <- summaryDF[,X1stQu]
+      maxs <- summaryDF[,X3rdQu]
+      if (!is.null(plothash[["ylimits"]])) {
+        mins <- c(mins, plothash[["ylimits"]][1])
+        maxs <- c(maxs, plothash[["ylimits"]][2])
+      }
+      if (!is.null(signifDFs)) maxs <- c(maxs, signifDFs$signifDF$y+0.1) # This 0.1 is to take into account text position - could also take max from text y's
+      plothash[["ylimits"]]=c(min(mins), max(maxs))
+
+
       if (plothash[["legend"]] == "boxplot") layers <- c(layers, geom_boxplot(data=summaryDF, mapping=mapping, width=0))
       if (plothash[["legend"]] == "bar") {
         #layers <- c(layers, geom_bar(data=summaryDF, mapping=aes_string(x=0, y=0, fill=plothash[["fill"]]), position="dodge", stat="identity", width=0))
-        if (is.null(plothash[["ylimits"]])) 
-        {
-          maxs <- summaryDF[,median]
-          if (!is.null(signifDFs)) maxs <- c(maxs, signifDFs$signifDF$y+0.1)
-          plothash[["ylimits"]]=c(min(summaryDF[,median]), max(maxs))
-        }
+
         plotOptions <- c(plotOptions, 'geom_bar(data=summaryDF, mapping=aes_string(x=1, y=0, fill=plothash[["fill"]]), position="dodge", stat="identity", width=0)')
         #legend <- "geom_bar(data=summaryDF, mapping=aes(x=0, y=0"
         #if (!is.null(plothash[["fill"]])) legend <- sprintf("%s, fill=%s", legend, plothash[["fill"]])
@@ -433,7 +457,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   
   cat("Plot:\n")
 
-  command <- "myplot <- ggplot()"
+  #command <- "myplot <- ggplot()"
 
   ##command <- paste("myplot <- p + ", plottype, errorbar, facet, sep="")
   #command <- paste(command, paste(plottype, collapse=" + "), sep=" + ")
@@ -1233,6 +1257,7 @@ sigengdv <- function(params)
     anova.results <- doanova(dv, params)
   }
 
+  summaryList <- NULL
   if (!params$settings$noplot) {
     if (!params$settings$noanova) diagnosticplot(dv, anova.results$resids)
     summaryList <- doplot(dv, params)
