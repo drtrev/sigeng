@@ -54,7 +54,7 @@ calcSummaryDF <- function(DF, variable, value)
   summaryDF
 }
 
-calcSignifDF <- function(DF, sig)
+calcSignifDF <- function(DF, dv, sig)
 # Take a list of significant data, e.g.
 #sig <- list(
 #     list(
@@ -70,6 +70,9 @@ calcSignifDF <- function(DF, sig)
 {
   signifDF <- NULL
   textDF <- NULL
+  xposStore <- NULL
+  yposStore <- -Inf
+  lastcut <- list(name="", value="")
 
   # For each significant thing
   for (s in sig) {
@@ -103,6 +106,37 @@ calcSignifDF <- function(DF, sig)
       # Find where this is in DF
       x <- which(levels(DFcut[,xvariable]) == firstvalue)
       xend <- which(levels(DFcut[,xvariable]) == secondvalue)
+
+      ####
+      # Dodge vertically
+      # Go through from x to xend in DFcut and push it above the max value
+      for (i in x:xend) {
+        current <- DFcut[DFcut[,xvariable] == levels(DFcut[,xvariable])[i] , dv]
+        cat("Cut value: ", s[["cut"]][["value"]], ", x: ", i, ", max dv: ", max(current), "\n")
+        if (max(current) > ypos - height - 0.3) ypos <- max(current) + height + 0.3
+      }
+
+      # Now dodge prev ypos's
+
+      if (s[["cut"]][["name"]] != lastcut[["name"]] || s[["cut"]][["value"]] != lastcut[["value"]]) { xposStore <- NULL; yposStore <- -Inf } # reset
+      lastcut <- list(name=s[["cut"]][["name"]], value=s[["cut"]][["value"]]) # store last cut
+
+      # pull out yposStore values where the corresponding xposStore values are within the range x:xend
+      yposDodge <- NULL
+      if (length(xposStore) > 0) {
+        for (i in 1:length(xposStore)) {
+          if (xposStore[i] %in% x:xend) yposDodge <- c(yposDodge, yposStore[i])
+        }
+        if (length(yposDodge) > 0) {
+          if (max(yposDodge) > ypos - height - 0.3) ypos <- max(yposDodge) + height + 0.3 # dodge text also
+        }
+      }
+      xposStore <- c(xposStore, x:xend)
+      yposStore <- c(yposStore, rep(ypos, length(x:xend)))
+
+      #
+      ####
+
 
       # Make a signifDF based on this
       #  2>-------3
@@ -198,10 +232,9 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   # This function should be called with an individual plothash and it plots as follows:
 
   # 1. Combine columns if requested, updating summaryDFs as appropriate
-  # 2. Prepare signifDFs (calcSignifDF)
-  # 3. Make layers depending on plottype, e.g. bar makes geom_bar and geom_errorbar
-  # 4. Add on user defined layers, e.g. facet_grid(~ ques)
-  # 5. Evaluate and plot
+  # 2. Make layers depending on plottype, e.g. bar makes geom_bar and geom_errorbar; Calc signifDFs with relevant DVs
+  # 3. Add on user defined layers, e.g. facet_grid(~ ques)
+  # 4. Evaluate and plot
 
   # NB: 'layers' stores a list of evaluated layers, e.g. geom_boxplot()
   #     'plotOptions' stores a list of unevaluated strings, e.g. "scale_x_discrete(...)" which could come from the user
@@ -228,16 +261,6 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     meansDF[,newvar] <- factor(meansDF[,newvar], levels=unique(meansDF[,newvar]))
   }
 
-  ####
-  # 2. Prepare signifDF
-
-  signifDFs <- NULL
-  if (!is.null(plothash[["sig"]])) signifDFs <- calcSignifDF(summaryDF, plothash[["sig"]])
-
-  cat("signifDF\n")
-  print(signifDFs$signifDF)
-  print(signifDFs$textDF)
-
 
   ####
   # 3. Make layers
@@ -245,12 +268,22 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   # First start with plottype specific layers
   layers <- list()
   plotOptions <- list()
+  signifDFs <- NULL
 
   # Default: boxplot
   if (is.null(plothash[["type"]])) plothash[["type"]] <- "boxplot"
 
   # Default: width
   if (is.null(plothash[["width"]])) plothash[["width"]] <- "0.9" # Confirmed default for boxplot
+
+  # If ylimits does not cover area used by geom_segment (i.e. signifDFs) then the whole graph won't display.
+  # So we take into account the users specification, but take min/max also including the signif values.
+  # After initialising mins and maxs here, we append to them below depending on plot type.
+  ylimits <- NULL
+  if (!is.null(plothash[["ylimits"]])) {
+    ylimits <- plothash[["ylimits"]] # This is technically the min/max value, but now we put all values together and use min() and max() below
+  }
+
 
   # TODO could make these separate functions
   if (plothash[["type"]] == "bar") {
@@ -281,6 +314,12 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     #mapping <- list(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
     mapping <- aes_string(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
     layers <- c(layers, geom_errorbar(data=meansDF, mapping=mapping, width=0.1, position=dodge))
+
+    if (!is.null(plothash[["sig"]])) {
+      meansDF$tops <- meansDF[,means] + meansDF[,stderrs] # highest values
+      signifDFs <- calcSignifDF(meansDF, "tops", plothash[["sig"]])
+    }
+
   }else if (plothash[["type"]] == "point") {
     #plottype <- "geom_point()"
     mapping <- aes_string(x=plothash[["x"]], y=plothash[["y"]], colour=plothash[["colour"]], fill=plothash[["fill"]])
@@ -334,20 +373,11 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
     #plottype <- paste(plottype, crossbar, ")", sep="") # end geom_crossbar
 
+    ylimits <- c(ylimits, summaryDF[,X1stQu], summaryDF[,X3rdQu])
+    if (!is.null(plothash[["sig"]])) signifDFs <- calcSignifDF(summaryDF, X3rdQu, plothash[["sig"]])
+
     # You can use this to draw a geom_boxplot() after the plot to replace the crossbar legend (not always useful) with a boxplot one
     if (!is.null(plothash[["legend"]])) {
-      # If ylimits does not cover area used by geom_segment (i.e. signifDFs) then the whole graph won't display.
-      # So we take into account the users specification, but take min/max also including the signif values.
-      mins <- summaryDF[,X1stQu]
-      maxs <- summaryDF[,X3rdQu]
-      if (!is.null(plothash[["ylimits"]])) {
-        mins <- c(mins, plothash[["ylimits"]][1])
-        maxs <- c(maxs, plothash[["ylimits"]][2])
-      }
-      if (!is.null(signifDFs)) maxs <- c(maxs, signifDFs$signifDF$y+0.1) # This 0.1 is to take into account text position - could also take max from text y's
-      plothash[["ylimits"]]=c(min(mins), max(maxs))
-
-
       if (plothash[["legend"]] == "boxplot") layers <- c(layers, geom_boxplot(data=summaryDF, mapping=mapping, width=0))
       if (plothash[["legend"]] == "bar") {
         #layers <- c(layers, geom_bar(data=summaryDF, mapping=aes_string(x=0, y=0, fill=plothash[["fill"]]), position="dodge", stat="identity", width=0))
@@ -365,6 +395,9 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     mapping <- aes_string(x=plothash[["x"]], y=plothash[["y"]], fill=plothash[["fill"]])
     layers <- geom_boxplot(data=DF, mapping=mapping, width=as.numeric(plothash[["width"]]))
     
+    if (!is.null(plothash[["sig"]])) signifDFs <- calcSignifDF(DF, plothash[["y"]], plothash[["sig"]])
+    ylimits <- c(ylimits, DF[,plothash[["y"]]])
+
     #plottype <- paste("geom_boxplot(data=DF, mapping=aes(x=", plothash[["x"]], ", y=", plothash[["y"]], sep="")
     #if (!is.null(plothash[["fill"]])) plottype <- paste(plottype, ", fill=", plothash[["fill"]], sep="")
     #plottype <- paste(plottype, ")", sep="") # end aes
@@ -414,6 +447,14 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     #command <- paste(command, ")", sep="")
   }
 
+  # Output signifDFs, change ylimits
+
+  cat("signifDF\n")
+  print(signifDFs$signifDF)
+  print(signifDFs$textDF)
+
+  if (!is.null(signifDFs)) ylimits <- c(ylimits, signifDFs$signifDF$y+0.1) # This 0.1 is to take into account text position - could also take max from text y's
+  plothash[["ylimits"]]=c(min(ylimits), max(ylimits))
   scaley <- list(name='plothash[["ylab"]]', limits=plothash[["ylimits"]], breaks=plothash[["yticbreaks"]], labels=plothash[["yticlabs"]])
   scaley <- scaley[!sapply(scaley, function (x) is.null(x))]
   scaleystr <- paste(names(scaley), scaley, collapse=", ", sep="=")
