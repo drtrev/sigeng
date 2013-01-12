@@ -273,6 +273,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   # Default: boxplot
   if (is.null(plothash[["type"]])) plothash[["type"]] <- "boxplot"
 
+  cat("Plot type:", plothash[["type"]], "\n")
+
   # Default: width
   if (is.null(plothash[["width"]])) plothash[["width"]] <- "0.9" # Confirmed default for boxplot
 
@@ -314,6 +316,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     #mapping <- list(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
     mapping <- aes_string(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
     layers <- c(layers, geom_errorbar(data=meansDF, mapping=mapping, width=0.1, position=dodge))
+
+    ylimits <- c(ylimits, meansDF[,means] - meansDF[,stderrs] - 0.1, meansDF[,means] + meansDF[,stderrs] + 0.1)
 
     if (!is.null(plothash[["sig"]])) {
       meansDF$tops <- meansDF[,means] + meansDF[,stderrs] # highest values
@@ -507,13 +511,15 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   print(plotOptions)
 
   #cat(command, "\n")
+  cat("Making plot\n")
   myplot <- ggplot() + layers + lapply(plotOptions, function (x) eval(parse(text=x)))
 
   #
   ####
 
-
+  cat("Printing plot\n")
   print(myplot)
+  cat("Printed plot\n")
 
   if (!nosave) {
     for (f in plothash[["filenames"]]) {
@@ -530,6 +536,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
 plotwivbiv <- function(meansdf, dvlabel)
 {
+  cat("Plot wivbiv\n")
   # TODO use parameters from plothashes or just call ploteng
   if (is.null(meansdf$biv)) {
     p <- ggplot(meansdf, aes(x=wiv, y=means))
@@ -648,6 +655,8 @@ plotWithinMult <- function(dv, params, plotPsycho)
   # concatenate vars for calcadj
   DF$conc <- getConc(DF, withinIVs)
 
+  cat("Correcting stderr using old Loftus and Masson method by concatenating all withinIVs\n")
+  if (length(betweenIVs) > 0) cat("TODO not sure what this correction is doing with between IVs\n")
   meansdf <- calcadj(DF, variable="conc", value=dv)
 
   summarydf <- calcSummaryDF(DF, variable="conc", value=dv)
@@ -662,11 +671,15 @@ plotWithinMult <- function(dv, params, plotPsycho)
   #cat("withinIVs")
   #print(withinIVs)
   #print(DF$conc)
-  #cat("Means DF before col rename\n")
-  #print(meansdf)
+  cat("Means DF before col rename\n")
+  print(meansdf)
 
   # means, stderrs, variable, ...
   colnames(meansdf)[3] <- "condition"
+  # when there's > 1 wiv
+  cat("Got here", ncol(meansdf), "\n")
+  if (ncol(meansdf) < 4) meansdf <- cbind(meansdf, unique(DF[,withinIVs[1]]))
+
   colnames(meansdf)[4:ncol(meansdf)] <- withinIVs
 
   #cat("Means DF\n")
@@ -684,6 +697,7 @@ plotWithinMult <- function(dv, params, plotPsycho)
   }
 
   # rounding error
+  cat("Correcting values near zero and 1\n")
   for (i in 1:nrow(meansdf)) {
     if (meansdf[i,"means"] > -0.001 && meansdf[i,"means"] < 0.0) {
       meansdf[i,"means"] = 0
@@ -904,14 +918,14 @@ doplot <- function(dv, params)
 
   }else{ # If we don't have between IVs
 
-    print("Correcting error bars with old Loftus and Masson method (no between IVs)...")
-    if (length(withinIVs)==1) {
-      meansdf <- calcadj(DF, variable=withinIVs[1], value=dv)
-      colnames(meansdf)[3] <- "wiv"
-      #print(meansdf)
-      #summarydf <- calcSummaryDF(DF, withinIVs[1], dv)
-      plotwivbiv(meansdf, dv)
-    }else{
+    #cat("Correcting error bars with old Loftus and Masson method (no between IVs)...\n")
+    ##if (length(withinIVs)==1) {
+    #  meansdf <- calcadj(DF, variable=withinIVs[1], value=dv)
+    #  colnames(meansdf)[3] <- "wiv"
+    #  #print(meansdf)
+    #  #summarydf <- calcSummaryDF(DF, withinIVs[1], dv)
+    #  plotwivbiv(meansdf, dv)
+    #}else{
       # if psychophysic do this for each participant first then overall
 
       plotPsycho <- F
@@ -942,7 +956,7 @@ doplot <- function(dv, params)
       # overall
       summaryDFs <- plotWithinMult(dv, params, plotPsycho)
 
-    }
+    #}
 
   }
 
