@@ -1336,7 +1336,6 @@ sigengdv <- function(params)
   # TODO ordinal analysis / convert to numeric
 
   # TODO sphericity test!
-  # TODO check residuals (can plot with plot(residuals(myaov)))
 
   anova.results <- NULL
   if (!params$settings$noanova) {
