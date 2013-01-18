@@ -1333,7 +1333,9 @@ sigengdv <- function(params)
   # let's be clear:
   dv <- params$DVs # should only be one DV now (chosen by sigeng)
 
-  # TODO ordinal analysis / convert to numeric
+  # TODO ordinal analysis / convert to numeric for DV
+
+  # TODO convert independent variable to numeric, e.g. xzratio factor in ANOVA or numeric in regression
 
   # TODO sphericity test!
 
