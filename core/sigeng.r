@@ -328,6 +328,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     #plottype <- "geom_point()"
     mapping <- aes_string(x=plothash[["x"]], y=plothash[["y"]], colour=plothash[["colour"]], fill=plothash[["fill"]])
     layers <- geom_point(data=DF, mapping=mapping)
+    ylimits <- c(ylimits, DF[,plothash[["y"]]])
   }else if (plothash[["type"]] == "psycho") {
 
     means <- "means"
@@ -335,9 +336,22 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     if (!is.null(plothash[["means"]])) means <- plothash[["means"]]
     if (!is.null(plothash[["stderrs"]])) stderrs <- plothash[["stderrs"]]
 
+    #cat("debug psycho:\n")
+    #cat("plothash[[\"x\"]]: ", plothash[["x"]], ", fill: ", plothash[["fill"]], ", colour: ", plothash[["colour"]], "\n", sep="")
+    #print(unname(meansDF[,means]))
+    #print(meansDF)
+    # testing
+    #meansDF[,means] <- unname(meansDF[,means])
     mapping <- aes_string(x=plothash[["x"]], y=means, fill=plothash[["fill"]], colour=plothash[["colour"]])
     layers <- geom_point(data=meansDF, mapping=mapping)
+    ylimits <- c(ylimits, meansDF[,means])
+    #temp.plot <- ggplot() + geom_point(data=meansDF, mapping=mapping) + geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond))
+    #cat("Testing temp.plot\n")
+    #print(temp.plot)
+    #stop("debug stop")
     layers <- c(layers, geom_line(data=fit, aes(x=x, y=y, group=cond, colour=cond)))
+
+    #print(fit)
 
     #mapping <- list(x=plothash[["x"]], y=means)
 
@@ -420,7 +434,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     #command <- paste(command, " breaks=c(", paste(plothash[["xticbreaks"]], collapse=',', sep=""), "))", sep="")
 
     # Continuous
-    plotOptions <- c(plotOptions, "scale_x_continuous(name=plothash[[\"xlab\"]], labels=plothash[[\"xticlabs\"]], breaks=plothash[[\"xticbreaks\"]])")
+    plotOptions <- c(plotOptions, "scale_x_continuous(name=plothash[[\"xlab\"]], labels=plothash[[\"xticlabs\"]], breaks=as.numeric(plothash[[\"xticbreaks\"]]))")
   }else{
     # Discrete
     #command <- paste(command, " + scale_x_discrete(name=\"", plothash[["xlab"]],
@@ -459,6 +473,9 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   if (!is.null(signifDFs)) ylimits <- c(ylimits, signifDFs$signifDF$y+0.1) # This 0.1 is to take into account text position - could also take max from text y's
   plothash[["ylimits"]]=c(min(ylimits), max(ylimits))
+  #cat("debug psycho2:\n")
+#plothash[["ylimits"]]=c(0, 1)
+  # the null ones will be removed on the next line... clever!
   scaley <- list(name='plothash[["ylab"]]', limits=plothash[["ylimits"]], breaks=plothash[["yticbreaks"]], labels=plothash[["yticlabs"]])
   scaley <- scaley[!sapply(scaley, function (x) is.null(x))]
   scaleystr <- paste(names(scaley), scaley, collapse=", ", sep="=")
@@ -513,6 +530,10 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   #cat(command, "\n")
   cat("Making plot\n")
   myplot <- ggplot() + layers + lapply(plotOptions, function (x) eval(parse(text=x)))
+  #myplot <- ggplot() + layers
+  #cat("Layers:\n")
+  #print(layers)
+  #myplot <- ggplot() + lapply(layers, function (x) eval(parse(text=x))) + lapply(plotOptions, function (x) eval(parse(text=x)))
 
   #
   ####
@@ -785,10 +806,20 @@ getConc <- function(DF, withinIVs)
     # if withinIVs contain the separator char, replace it
     tempDF <- DF
     for (i in withinIVs) {
-      tempDF[,i] <- gsub('\\.', '_', tempDF[,i])
+      tempDF[,i] <- factor(gsub('\\.', '_', tempDF[,i]), levels=levels(DF[,i])) # need factor here because the levels are used below
     }
     conc <- do.call(paste, c(tempDF[,withinIVs], sep="."))
-    conc <- factor(conc, levels=unique(conc))
+    # get levels in same order as the previous levels (hopefully what the user wants)
+    my.levels.temp <- lapply(tempDF[,withinIVs], levels)
+    #print(my.levels.temp)
+    # vary the last one first, so set others to length of one to the right
+    for (i in (length(withinIVs)-1):1) {
+      my.levels.temp[withinIVs[i]][[1]] <- rep(my.levels.temp[withinIVs[i]][[1]], each=length(my.levels.temp[withinIVs[i+1]][[1]]))
+    }
+    my.levels <- do.call(paste, c(my.levels.temp, sep="."))
+    #print(my.levels)
+    #conc <- factor(conc, levels=unique(conc))
+    conc <- factor(conc, levels=my.levels)
   }else{
     conc <- DF[,withinIVs]
     if (!is.factor(conc)) conc <- factor(conc)
