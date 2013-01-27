@@ -1309,7 +1309,8 @@ doanova <- function(dv, params)
   }
   # end residuals
 
-  robust <- robustanova(dv, params)
+  robust <- NULL
+  if (!params$settings$norobust) robust <- robustanova(dv, params)
   
   return(list(my.aov=my.aov, sigs=sigs, trends=trends, resids=my.resids, robust=robust))
 }
@@ -1324,6 +1325,162 @@ makeredolevelsp <- function(redolevel)
   }
 
   return(redolevelsp)
+}
+
+create.dir <- function(dirname)
+{
+  errorcheck <- dir.create(dirname)
+  if (!errorcheck[1]) stop(paste0("Error, could not create directory: ", dirname))
+}
+
+cache.save <- function(filename, obj, path)
+{
+  if (!file.exists(path)) {
+    # If we use the default cache path, we can help out and create it all
+    # Otherwise it will create max one dir
+    if (!file.exists("~/.sigeng")) create.dir("~/.sigeng")
+    create.dir(path)
+  }
+
+  save(obj, file=paste0(path, "/", filename))
+}
+
+cache.load <- function(filename, path)
+{
+  cat("Attempting cache load\n")
+  filenameall <- paste0(path, "/", filename)
+  print(filenameall)
+  if (!file.exists(filenameall)) {
+    cat(paste0("Could not find cache file: ", filenameall, "\n"))
+    return (NULL) # Error
+  }else{
+    temp.space <- new.env()
+    foo <- load(filenameall, temp.space) # this will probably be called "obj"
+    the.object <- get(foo, temp.space)
+    rm(temp.space)
+  }
+
+  return(the.object)
+}
+
+settings.fast <- function(norobust=T)
+{
+  return(list(noanova=F, noanovasave=T, noanovaprint=T, noredo=T, noplot=T, noplotsave=T, noonlysig=T, noperl=T, nolatex=T, norobust=norobust))
+}
+
+brute.testouts <- function(params)
+{
+  
+  cat("Brute: testing outs\n")
+  if (params$brute$testouts > 3)
+  {
+    warning("brute.testouts: Not dealing with testouts > 3 yet.\n")
+    params$brute$testouts <- 3
+  }
+
+  finished = F
+  myouts <- NULL
+
+  # speed up local params
+  params$settings <- settings.fast(norobust=T)
+
+  cat(paste0("ID var: ", params$IDs, "\n"))
+  IDs <- params$DF[, params$IDs]
+  print(IDs)
+  if (is.factor(IDs)) IDs <- as.integer(levels(IDs)) # TODO deal with levels that are string, i.e. change this function a bit
+  else IDs <- unique(IDs)
+
+  startID <- min(IDs)
+  endID <- max(IDs)
+
+  cat(paste0("startID: ", startID, "\n"))
+  cat(paste0("endID: ", endID, "\n"))
+
+  for (i in startID:endID) {
+    out1 <- i
+    for (j in i:endID) {
+      #if (i == j) next # allow duplicates because then it will just remove one element
+      out2 <- c(out1, j)
+      
+      for (k in j:endID) {
+        outs <- c(out2, k)
+        if (params$brute$testouts == 1) outs <- c(k)
+        if (params$brute$testouts == 2) outs <- c(j, k)
+        cat("Leaving out: ")
+        do.call(cat, list(outs, sep=","))
+        cat("\n")
+        DFbak <- params$DF
+          params$DF <- params$DF[!(params$DF$id %in% outs),]
+          myeng <- sigengdv(params)
+        params$DF <- DFbak
+        #cat("Anova in brute:\n")
+        #print(myeng$anova.results$my.aov)
+        pval <- summary(myeng$anova.results$my.aov)[[2]][[1]][["Pr(>F)"]][1]
+        if (is.null(myeng$anova.results$robust)) pval2 <- 1
+        else pval2 <- myeng$anova.results$robust$siglevel
+        if ((pval <= 0.05 || pval2 <= 0.05) && !identical(outs, as.integer(params$brute$testoutsignore))) {
+          #print(outs)
+          sigtest <- NULL
+          if (pval <= 0.05) sigtest <- "normal"
+          if (pval2 <= 0.05) sigtest <- c(sigtest, "robust")
+          #print(sigtest)
+          #myouts <- c(myouts, list(myeng=myeng, outs=outs, sigtest=sigtest))
+          myouts <- c(myouts, list(outs=outs, sigtest=sigtest))
+          #finished=T
+          #break;
+        }
+      }
+
+      if (params$brute$testouts==1) finished=T
+      if (finished) break;
+    }
+
+    if (params$brute$testouts==2) finished=T
+    if (finished) break;
+  }
+
+  if (finished) cat("Brute: testouts: Finished with testouts < 3.\n")
+  
+  for (i in myouts) {
+    cat("outs[i]:")
+    print(i)
+  }
+
+  if (is.null(myouts)) myouts <- "No outliers" # code for no outliers
+
+  cache.save(cache.mkfilename("brute.testouts", params), myouts, params$cachepath)
+  return(myouts)
+}
+
+cache.mkfilename <- function(name, params)
+# You can optionally use this to make a standard file name
+{
+  return(paste(name, params$analysisID, params$DVs, "Rdata", sep="."))
+}
+
+sigengbrutedv <- function(params)
+# First check if we need to do any brute stuff
+# Then call sigengdv, e.g. after removing outliers
+# Return the same as sigengdv
+{
+  outs <- NULL
+  if (!is.null(params$brute$testouts) && params$brute$testouts > 0) {
+# test for outliers and cache
+# note we have to store the DV along with the cache
+    outs <- cache.load(cache.mkfilename("brute.testouts", params), params$cachepath)
+    if (is.null(outs)) outs <- brute.testouts(params) # do for real
+    else cat("Loaded brute.testouts from cache\n")
+  }
+  if (!is.null(params$brute$retestouts) && params$brute$retestouts > 0) {
+    if (!is.null(outs)) warning("testouts and retestouts both set")
+    outs <- brute.testouts(params)
+  }
+
+  # Now run sigengdv 'for real' with outs removed
+  if (!is.null(outs) && outs != "No outliers") {
+    params$DF <- params$DF[!(params$DF$id %in% outs),]
+  }
+  sigengdv(params)
 }
 
 sigengdv <- function(params)
@@ -1361,15 +1518,20 @@ sigengdv <- function(params)
   return(sigengout)
 }
 
+# AnalysisID is used for caching/reloading cache
 # Here blocks means the experiment was repeated in more than one block
 # noanova noplot and nosave (figs) are to speed things up when testing
-sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs=NULL, blocks=NULL, plothashes=NULL, logfile="/tmp/sigenglog.txt", clobberlog=T, anovafile="/tmp/anova.txt", ...)
+# brute is for brute force checking, where testouts checks the cache for outliers (=no. of outliers to remove), retestouts forces a rebuild of the cache, pitac is for problematic collaborators, generates loads of figures TODO
+# testoutsignore will not remove those IDs, used with testouts and retestouts
+sigeng <- function(analysisID="default", DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs=NULL, blocks=NULL, plothashes=NULL,
+                   brute=list(testouts=0, retestouts=0, testoutsignore=NULL, pitac=F), cachepath="~/.sigeng/cache",
+                   logfile="/tmp/sigenglog.txt", clobberlog=T, anovafile="/tmp/anova.txt", ...)
 {
   sigeng.version=0.9
   
   
 
-  settingsdefault <- list(noanova=F, noanovasave=F, noanovaprint=F, noredo=F, noplot=F, noplotsave=F, noonlysig=F, noperl=F, nolatex=F)
+  settingsdefault <- list(noanova=F, noanovasave=F, noanovaprint=F, noredo=F, noplot=F, noplotsave=F, noonlysig=F, noperl=F, nolatex=F, norobust=F)
   if (length(list(...)) > 0) {
     if (!is.list(list(...)[[1]])) settings <- list(...)
     else settings <- list(...)[[1]]
@@ -1382,7 +1544,7 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
 
   # copy them for easy passing to functions
   # NOTE We include settings in params
-  params <- list(DF=DF, IDs=IDs, DVs=DVs, withinIVs=withinIVs, betweenIVs=betweenIVs, blocks=blocks, plothashes=plothashes, logfile=logfile, clobberlog=clobberlog, anovafile=anovafile, redolevel=0, redolevelsp=NULL, settings=settings)
+  params <- list(analysisID=analysisID, DF=DF, IDs=IDs, DVs=DVs, withinIVs=withinIVs, betweenIVs=betweenIVs, blocks=blocks, plothashes=plothashes, brute=brute, cachepath=cachepath, logfile=logfile, clobberlog=clobberlog, anovafile=anovafile, redolevel=0, redolevelsp=NULL, settings=settings)
   #rm(DF, IDs, DVs, withinIVs, betweenIVs, blocks, plothashes, logfile, anovafile)
 
   # Error check
@@ -1407,6 +1569,7 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
   #attach(params) -- problematic if we crash, leaves it attached
 
   # TODO outlier check for removing participants based on other vars
+  # This should have a global outlier check here based on all DVs, e.g. using out() from WRS
 
   # TODO MANOVA
 
@@ -1423,7 +1586,9 @@ sigeng <- function(DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs
       params$DVs <- dv # clobber param DVs (would have happened anyway from redo)
       params$redolevelsp <- makeredolevelsp(params$redolevel)
       #anova.results <- sigengdv(params)
-      sigengout <- sigengdv(params)
+      
+      sigengout <- sigengbrutedv(params)
+      #sigengout <- sigengdv(params)
     }
   }
 
