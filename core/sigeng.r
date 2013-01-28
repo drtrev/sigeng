@@ -1368,14 +1368,14 @@ settings.fast <- function(norobust=T)
   return(list(noanova=F, noanovasave=T, noanovaprint=T, noredo=T, noplot=T, noplotsave=T, noonlysig=T, noperl=T, nolatex=T, norobust=norobust))
 }
 
-brute.testouts <- function(params)
+brute.outs <- function(params)
 {
   
   cat("Brute: testing outs\n")
-  if (params$brute$testouts > 3)
+  if (params$brute$outs$test > 3)
   {
-    warning("brute.testouts: Not dealing with testouts > 3 yet.\n")
-    params$brute$testouts <- 3
+    warning("brute.outs: Not dealing with test > 3 yet.\n")
+    params$brute$outs$test <- 3
   }
 
   finished = F
@@ -1387,6 +1387,7 @@ brute.testouts <- function(params)
   cat(paste0("ID var: ", params$IDs, "\n"))
   IDs <- params$DF[, params$IDs]
   print(IDs)
+  warning("General reminder: Brute.outs does not work when IDs are not numeric yet")
   if (is.factor(IDs)) IDs <- as.integer(levels(IDs)) # TODO deal with levels that are string, i.e. change this function a bit
   else IDs <- unique(IDs)
 
@@ -1404,8 +1405,8 @@ brute.testouts <- function(params)
       
       for (k in j:endID) {
         outs <- c(out2, k)
-        if (params$brute$testouts == 1) outs <- c(k)
-        if (params$brute$testouts == 2) outs <- c(j, k)
+        if (params$brute$outs$test == 1) outs <- c(k)
+        if (params$brute$outs$test == 2) outs <- c(j, k)
         cat("Leaving out: ")
         do.call(cat, list(outs, sep=","))
         cat("\n")
@@ -1418,7 +1419,7 @@ brute.testouts <- function(params)
         pval <- summary(myeng$anova.results$my.aov)[[2]][[1]][["Pr(>F)"]][1]
         if (is.null(myeng$anova.results$robust)) pval2 <- 1
         else pval2 <- myeng$anova.results$robust$siglevel
-        if ((pval <= 0.05 || pval2 <= 0.05) && !identical(outs, as.integer(params$brute$testoutsignore))) {
+        if ((pval <= 0.05 || pval2 <= 0.05) && !identical(outs, as.integer(params$brute$outs$ignore))) {
           #print(outs)
           sigtest <- NULL
           if (pval <= 0.05) sigtest <- "normal"
@@ -1431,24 +1432,30 @@ brute.testouts <- function(params)
         }
       }
 
-      if (params$brute$testouts==1) finished=T
+      if (params$brute$outs$test==1) finished=T
       if (finished) break;
     }
 
-    if (params$brute$testouts==2) finished=T
+    if (params$brute$outs$test==2) finished=T
     if (finished) break;
   }
 
-  if (finished) cat("Brute: testouts: Finished with testouts < 3.\n")
+  if (finished) cat("Brute.outs: Finished with test < 3.\n")
   
   for (i in myouts) {
     cat("outs[i]:")
     print(i)
   }
 
-  if (is.null(myouts)) myouts <- "No outliers" # code for no outliers
+  if (is.null(myouts)) {
+    myouts <- "No brute outliers" # code for no outliers
+    cat("No brute outliers\n")
+  }
 
-  cache.save(cache.mkfilename("brute.testouts", params), myouts, params$cachepath)
+  cache.save(cache.mkfilename("brute.outs", params), myouts, params$cachepath)
+  # Store settings when outs were generated
+  outs.settings <- list(ignore=params$brute$outs$ignore, norobust=params$settings$norobust)
+  cache.save(cache.mkfilename("brute.outs.settings", params), outs.settings, params$cachepath)
   return(myouts)
 }
 
@@ -1464,20 +1471,28 @@ sigengbrutedv <- function(params)
 # Return the same as sigengdv
 {
   outs <- NULL
-  if (!is.null(params$brute$testouts) && params$brute$testouts > 0) {
+  if (!is.null(params$brute$outs$test) && params$brute$outs$test > 0) {
 # test for outliers and cache
 # note we have to store the DV along with the cache
-    outs <- cache.load(cache.mkfilename("brute.testouts", params), params$cachepath)
-    if (is.null(outs)) outs <- brute.testouts(params) # do for real
-    else cat("Loaded brute.testouts from cache\n")
+    outs <- cache.load(cache.mkfilename("brute.outs", params), params$cachepath)
+    if (is.null(outs)) outs <- brute.outs(params) # do for real
+    else cat("Loaded brute.outs from cache\n")
+    if (outs == "No brute outliers") cat(outs, "\n")
+    else {
+      for (i in myouts) {
+        cat("outs[i]:")
+          print(i)
+      }
+    }
   }
-  if (!is.null(params$brute$retestouts) && params$brute$retestouts > 0) {
-    if (!is.null(outs)) warning("testouts and retestouts both set")
-    outs <- brute.testouts(params)
+  if (!is.null(params$brute$outs$retest) && params$brute$outs$retest > 0) {
+    if (!is.null(outs)) warning("brute$outs$test and brute$outs$retest both set")
+    params$brute$outs$test <- params$brute$outs$retest
+    outs <- brute.outs(params)
   }
 
   # Now run sigengdv 'for real' with outs removed
-  if (!is.null(outs) && outs != "No outliers") {
+  if (!is.null(outs) && outs != "No brute outliers") {
     params$DF <- params$DF[!(params$DF$id %in% outs),]
   }
   sigengdv(params)
@@ -1521,10 +1536,10 @@ sigengdv <- function(params)
 # AnalysisID is used for caching/reloading cache
 # Here blocks means the experiment was repeated in more than one block
 # noanova noplot and nosave (figs) are to speed things up when testing
-# brute is for brute force checking, where testouts checks the cache for outliers (=no. of outliers to remove), retestouts forces a rebuild of the cache, pitac is for problematic collaborators, generates loads of figures TODO
-# testoutsignore will not remove those IDs, used with testouts and retestouts
-sigeng <- function(analysisID="default", DF, IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs=NULL, blocks=NULL, plothashes=NULL,
-                   brute=list(testouts=0, retestouts=0, testoutsignore=NULL, pitac=F), cachepath="~/.sigeng/cache",
+# brute is for brute force checking, where outs$test checks the cache for outliers (=no. of outliers to remove), outs$retest forces a rebuild of the cache, pitac is for problematic collaborators, generates loads of figures TODO
+# outs$ignore will not remove those IDs, used with outs$test and outs$retest
+sigeng <- function(DF, analysisID="default", IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs=NULL, blocks=NULL, plothashes=NULL,
+                   brute=list(outs=list(test=0, retest=0, ignore=NULL), pitac=F), cachepath="~/.sigeng/cache",
                    logfile="/tmp/sigenglog.txt", clobberlog=T, anovafile="/tmp/anova.txt", ...)
 {
   sigeng.version=0.9
@@ -1611,5 +1626,52 @@ sigeng <- function(analysisID="default", DF, IDs="id", DVs=c("value"), withinIVs
   sigengout
 
   #if (is.null(myredo)) { return(DF) } else { return(myredo) }
+}
+
+
+
+# useful utils
+
+summariseForPsignifit <- function(DF, idvar, intensityvar, responsevar, condvar=NULL) {
+  ## We want x, y, n for each participant
+  ## intensity, number of positive response, number of trials
+  
+  # so cover possibilities of a numeric or factor id
+  if (is.factor(DF[,idvar])) ids <- levels(DF[,idvar])
+  else ids <- unique(DF[,idvar])
+  
+  xs <- levels(DF[,intensityvar])
+
+  nocond <- F
+  if (is.null(condvar)) {
+    nocond <- T
+    condvar <- "cond"
+    DF[,condvar] <- 1 # set up a dummary cond var, run as normal, then delete it from results
+  }
+  
+  res <- NULL
+  
+  for (id in ids) {
+    DFid <- DF[DF$id==id,]
+    
+    for (cond in levels(DF[,condvar])) {
+      DFidcond <- DFid[DFid[,condvar]==cond,]
+      ys <- NULL
+      ns <- NULL
+      for (x in xs) {
+        DFidcondx <- DFidcond[DFidcond[,intensityvar]==x,]
+        ys <- c(ys, sum(DFidcondx$response2bigger))
+        #ys <- c(ys, sum(DFidcondx$correct))
+        ns <- c(ns, nrow(DFidcondx))
+      }
+      residcond <- data.frame(id=id, cond=cond, x=xs, y=ys, n=ns)
+      residcond <- rename(residcond, c("cond"=condvar))
+      res <- rbind(res, residcond)
+    }
+  }
+
+  if (nocond) res[,condvar] <- NULL
+
+  return (res)
 }
 
