@@ -1477,9 +1477,9 @@ sigengbrutedv <- function(params)
     outs <- cache.load(cache.mkfilename("brute.outs", params), params$cachepath)
     if (is.null(outs)) outs <- brute.outs(params) # do for real
     else cat("Loaded brute.outs from cache\n")
-    if (outs == "No brute outliers") cat(outs, "\n")
+    if (length(outs) == 1 && outs == "No brute outliers") cat(outs, "\n")
     else {
-      for (i in myouts) {
+      for (i in outs) {
         cat("outs[i]:")
           print(i)
       }
@@ -1642,11 +1642,11 @@ summariseForPsignifit <- function(DF, idvar, intensityvar, responsevar, condvar=
   
   xs <- levels(DF[,intensityvar])
 
-  nocond <- F
+  #nocond <- F
   if (is.null(condvar)) {
-    nocond <- T
+    #nocond <- T
     condvar <- "cond"
-    DF[,condvar] <- 1 # set up a dummary cond var, run as normal, then delete it from results
+    DF[,condvar] <- 1 # set up a dummary cond var, so it can be easily processed by psignifit script
   }
   
   res <- NULL
@@ -1670,7 +1670,8 @@ summariseForPsignifit <- function(DF, idvar, intensityvar, responsevar, condvar=
     }
   }
 
-  if (nocond) res[,condvar] <- NULL
+  # leave the cond, so it can be easily processed by the psignifit script
+  #if (nocond) res[,condvar] <- NULL
 
   return (res)
 }
