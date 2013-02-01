@@ -1632,11 +1632,16 @@ sigeng <- function(DF, analysisID="default", IDs="id", DVs=c("value"), withinIVs
 
 # useful utils
 
-summariseForPsignifit <- function(DF, idvar, intensityvar, responsevar, condvar=NULL) {
+psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar="y", condvar=NULL, outfile="summary.txt", auto.write=T)
+  # Usage e.g.:
+  # mysum <- psignifit.summariseFor(...)
+  # write.table(mysum, file="summary.txt", row.names=F)
+  # Write auto.write==T, we will automatically write the summary to outfile, but first we check it exists and ask whether to overwrite it.
+{
   ## We want x, y, n for each participant
   ## intensity, number of positive response, number of trials
   
-  # so cover possibilities of a numeric or factor id
+  # cover possibilities of a numeric or factor id
   if (is.factor(DF[,idvar])) ids <- levels(DF[,idvar])
   else ids <- unique(DF[,idvar])
   
@@ -1660,7 +1665,7 @@ summariseForPsignifit <- function(DF, idvar, intensityvar, responsevar, condvar=
       ns <- NULL
       for (x in xs) {
         DFidcondx <- DFidcond[DFidcond[,intensityvar]==x,]
-        ys <- c(ys, sum(DFidcondx$response2bigger))
+        ys <- c(ys, sum(DFidcondx[,responsevar]))
         #ys <- c(ys, sum(DFidcondx$correct))
         ns <- c(ns, nrow(DFidcondx))
       }
@@ -1673,6 +1678,128 @@ summariseForPsignifit <- function(DF, idvar, intensityvar, responsevar, condvar=
   # leave the cond, so it can be easily processed by the psignifit script
   #if (nocond) res[,condvar] <- NULL
 
+  # summarise overall, allow for fitting/plotting overall data
+  for (cond in levels(DF[,condvar])) {
+    DFcond <- DF[DF[,condvar]==cond,]
+    ys <- NULL
+    ns <- NULL
+    for (x in xs) {
+      DFcondx <- DFcond[DFcond[,intensityvar]==x,]
+      ys <- c(ys, sum(DFcondx[,responsevar]))
+      ns <- c(ns, nrow(DFcondx))
+    }
+    residcond <- data.frame(id="all", cond=cond, x=xs, y=ys, n=ns)
+    residcond <- rename(residcond, c("cond"=condvar))
+    res <- rbind(res, residcond)
+  }
+  
+  if (file.exists(outfile)) {
+    cat("File exists:", outfile, "\n")
+    cat("Overwrite?\n")
+    response <- readLines(stdin(), 1)
+    if (response=="y") {
+      cat("Overwriting.\n")
+      write.table(res, outfile, row.names=F)
+    }else{
+      cat("Not overwriting.\n")
+    }
+  }
+
   return (res)
 }
 
+psignifit.run <- function(psignifit="~/ollik-home/utils/psignifit_3.0_beta.20120611.1/tests/dodds/analysesummary.py",
+                           summaryfilein="summary.txt",
+                           threshslopesfileout="rectwidth-data/threshslopes.txt")
+  # Get psignifit to analyse summary file and output thresholds, slopes, and other params
+  # Returns false when not run (e.g. output file exists, chose not to overwrite) or true otherwise
+{
+  # First run e.g. rectwidth-analysis.r, and call mysum <- summariseForPsignifit(...), then
+  # write.table(mysum, file="summary.txt", row.names=F); i.e. make summary.txt
+
+  # This will warn before overwriting threshslopesfileout
+  if (file.exists(threshslopesfileout)) {
+    cat("File exists:", threshslopesfileout, "\n")
+    cat("Overwrite?\n")
+    response <- readLines(stdin(), 1)
+    if (response=="y") {
+      cat("Overwriting.\n")
+    }else{
+      cat("Not overwriting.\n")
+      return (F) # Not run
+      #stop("Stopping due to threshslopes file existing.")
+    }
+  }
+  
+  
+  cat("Analysing with psignifit...\n")
+  
+  # Then analyse it with psignifit
+  system(paste(psignifit, summaryfilein, threshslopesfileout, sep=" "))
+  
+  cat("Finished psignifit\n")
+
+  return (T) # run
+}
+
+psignifit.readthreshslope <- function(threshslopesfile="rectwidth-data/threshslopes.txt", idvar="id", condvar=NULL)
+  # Get data frame of threshslopes file (the file output from psignifit analysis script), see psignifit.run
+  # Set idvar or condvar to null to keep original values
+{
+  
+  #######
+  # Read it in
+  #rm(list=ls())
+  DF <- data.frame(read.table(threshslopesfile, header=T))
+
+  if (is.null(idvar)) idvar <- "pid"
+  if (is.null(condvar)) condvar <- "cond"
+
+  # This actually works with null values but I had to set idvar and condvar anyway for the code below
+  DF <- rename(DF, c("pid"=idvar, "cond"=condvar))
+
+  DF[,idvar] <- factor(DF[,idvar])
+  DF[,condvar] <- factor(DF[,condvar])
+  #str(DF)
+
+  return(DF)
+}
+
+psignifit.predict <- function(x, alpha, beta, gamma, lambda)
+  # Predict the resulting function based on parameter estimates
+{
+  y <- 1/(1+exp(-(x-alpha)/beta))
+  y <- gamma + (1 - gamma - lambda) * y
+}
+
+psignifit.plot <- function(DFthresh, DFsum, ids=NULL, conds=NULL, idvar="id", condvar=NULL)
+  # Plot, with only ids or conds.
+  # When null, use them all.
+{
+
+  if (is.null(ids))   { if (is.factor(DF[,idvar]))   ids   <- levels(DF[,idvar])   else ids   <- DF[,idvar] }
+  if (is.null(conds)) { if (is.factor(DF[,condvar])) conds <- levels(DF[,condvar]) else conds <- DF[,condvar] }
+
+  for (i in ids) {
+    p <- ggplot()
+    for (cond in conds) {
+      #DFidcond <- DF[DF[,idvar]==i & DF[,condvar]==cond,]
+      DFthreshidcond <- DFthresh[DFthresh[,idvar]==i & DFthresh[,condvar]==cond,]
+      DFsumidcond <- DFsum[DFsum[,idvar]==i & DFsum[,condvar]==cond,]
+
+      temp.x <- remove.factor(DFsumidcond$x, convert="numeric")
+      my.model <- data.frame(x=min(temp.x):max(temp.x))
+      my.model$y <- psignifit.predict(my.model$x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
+
+      colnames(DFsumidcond)[colnames(DFsumidcond)==condvar] <- "cond"
+      my.model$cond <- cond
+      #print(head(DFsumidcond))
+      #print(head(my.model))
+      p <- p + geom_point(data=DFsumidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
+           geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond))
+
+    }
+    print(p)
+  }
+
+}
