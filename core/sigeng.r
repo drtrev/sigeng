@@ -1631,8 +1631,28 @@ sigeng <- function(DF, analysisID="default", IDs="id", DVs=c("value"), withinIVs
 
 
 # useful utils
+file.overwrite.prompt <- function(filename=stop("file.overwrite.prompt: no filename specified"))
+{
+  overwrite <- T # default, i.e. also if file does not exist
 
-psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar="y", condvar=NULL, outfile="summary.txt", auto.write=T)
+  if (file.exists(filename)) {
+    cat("File exists:", filename, "\n")
+    cat("Overwrite?\n")
+    response <- readLines(stdin(), 1)
+    if (response=="y") {
+      cat("Overwriting.\n")
+    }else{
+      cat("Not overwriting.\n")
+      overwrite <- F
+    }
+  }else{
+    cat("Creating new file:", filename, "\n")
+  }
+
+  return(overwrite)
+}
+
+psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar="y", condvar=NULL, outfile="summary.txt", outfile.overall="summary-overall.txt", auto.write=T)
   # Usage e.g.:
   # mysum <- psignifit.summariseFor(...)
   # write.table(mysum, file="summary.txt", row.names=F)
@@ -1678,7 +1698,54 @@ psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar
   # leave the cond, so it can be easily processed by the psignifit script
   #if (nocond) res[,condvar] <- NULL
 
-  # summarise overall, allow for fitting/plotting overall data
+  # We have the mean for each participant. Now calculate the variance for each condition and intensity,
+  # and the standard error
+  # We could here just create a new variable in the data frame called value, which is y/n, rather than
+  # calculate it each loop. That's what we end up doing below anyway to call calcadj.
+  # So this works but could be neater, but I am far too exhausted/disinterested to work on this right now.
+  ressum <- NULL
+  for (cond in levels(DF[,condvar])) {
+    res.cond <- res[res[,condvar]==cond,]
+    for (x in xs) {
+      res.condx <- res.cond[res.cond$x==x,]
+
+      # we have the data. get the mean, sd, std.error
+      my.mean <- mean(res.condx$y/res.condx$n)
+      my.sd <- sd(res.condx$y/res.condx$n)
+      my.std.error <- std.error(res.condx$y/res.condx$n)
+      
+      temp <- data.frame(cond=cond, x=x, mean=my.mean, sd=my.sd, std.error=my.std.error)
+      ressum <- rbind(ressum, temp)
+      #res[res[,condvar]==cond & res$x==x,]$all.mean <- my.mean
+      #res[res[,condvar]==cond & res$x==x,]$all.sd <- my.sd
+      #res[res[,condvar]==cond & res$x==x,]$all.std.error <- my.std.error
+    }
+  }
+
+  # now with adjustment
+  # Note I've left the mean.adj in the adjusted values even though it should be the same
+  # This allows for a quick check (e.g. it could be different if there are between subject elements)
+  #print(res[,condvar])
+  res.adj <- res
+  res.adj$variable <- paste(res.adj[,condvar], res.adj$x, sep=".")
+  res.adj$variable <- factor(res.adj$variable)
+  res.adj$value <- res.adj$y/res.adj$n
+  #print(res.adj$id)
+  res.adj <- calcadj(res.adj)
+  #print(res.adj)
+  ressum$mean.adj <- -10000
+  ressum$std.error.adj <- -10000
+  for (cond in levels(DF[,condvar])) {
+    for (x in xs) {
+      ressum[ressum$cond==cond & ressum$x==x,]$mean.adj <- res.adj[res.adj$variable==paste(cond, x, sep="."),]$means
+      ressum[ressum$cond==cond & ressum$x==x,]$std.error.adj <- res.adj[res.adj$variable==paste(cond, x, sep="."),]$stderrs
+    }
+  }
+
+  #ressum <- rename(ressum, c("cond"=condvar))
+
+  # Calculate for all participants in main psignifit table, allow for fitting/plotting overall data
+
   for (cond in levels(DF[,condvar])) {
     DFcond <- DF[DF[,condvar]==cond,]
     ys <- NULL
@@ -1693,19 +1760,12 @@ psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar
     res <- rbind(res, residcond)
   }
   
-  if (file.exists(outfile)) {
-    cat("File exists:", outfile, "\n")
-    cat("Overwrite?\n")
-    response <- readLines(stdin(), 1)
-    if (response=="y") {
-      cat("Overwriting.\n")
-      write.table(res, outfile, row.names=F)
-    }else{
-      cat("Not overwriting.\n")
-    }
+  if (auto.write) {
+    if (file.overwrite.prompt(outfile)) write.table(res, outfile, row.names=F)
+    if (file.overwrite.prompt(outfile.overall)) write.table(ressum, outfile.overall, row.names=F)
   }
 
-  return (res)
+  return (list(psignifit=res, overall=ressum))
 }
 
 psignifit.run <- function(psignifit="~/ollik-home/utils/psignifit_3.0_beta.20120611.1/tests/dodds/analysesummary.py",
@@ -1770,33 +1830,43 @@ psignifit.predict <- function(x, alpha, beta, gamma, lambda)
 {
   y <- 1/(1+exp(-(x-alpha)/beta))
   y <- gamma + (1 - gamma - lambda) * y
+  cat("gamma: ", gamma, ", lambda: ", lambda, "\n")
+
+  return(y)
 }
 
-psignifit.plot <- function(DFthresh, DFsum, ids=NULL, conds=NULL, idvar="id", condvar=NULL)
+psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity")
   # Plot, with only ids or conds.
   # When null, use them all.
 {
 
-  if (is.null(ids))   { if (is.factor(DF[,idvar]))   ids   <- levels(DF[,idvar])   else ids   <- DF[,idvar] }
-  if (is.null(conds)) { if (is.factor(DF[,condvar])) conds <- levels(DF[,condvar]) else conds <- DF[,condvar] }
+  if (is.null(ids))   { if (is.factor(DFthresh[,idvar]))   ids   <- levels(DFthresh[,idvar])   else ids   <- DFthresh[,idvar] }
+  if (is.null(conds)) { if (is.factor(DFthresh[,condvar])) conds <- levels(DFthresh[,condvar]) else conds <- DFthresh[,condvar] }
 
   for (i in ids) {
     p <- ggplot()
     for (cond in conds) {
       #DFidcond <- DF[DF[,idvar]==i & DF[,condvar]==cond,]
       DFthreshidcond <- DFthresh[DFthresh[,idvar]==i & DFthresh[,condvar]==cond,]
-      DFsumidcond <- DFsum[DFsum[,idvar]==i & DFsum[,condvar]==cond,]
+      DFpsiidcond <- DFpsi[DFpsi[,idvar]==i & DFpsi[,condvar]==cond,]
 
-      temp.x <- remove.factor(DFsumidcond$x, convert="numeric")
+      temp.x <- remove.factor(DFpsiidcond$x, convert="numeric")
       my.model <- data.frame(x=min(temp.x):max(temp.x))
       my.model$y <- psignifit.predict(my.model$x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
 
-      colnames(DFsumidcond)[colnames(DFsumidcond)==condvar] <- "cond"
+      colnames(DFpsiidcond)[colnames(DFpsiidcond)==condvar] <- "cond"
       my.model$cond <- cond
-      #print(head(DFsumidcond))
+      #print(head(DFpsiidcond))
       #print(head(my.model))
-      p <- p + geom_point(data=DFsumidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
-           geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond))
+      if (i == "all") {
+        # use now the DFoverall for stderror etc.
+        p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
+             geom_errorbar(data=DFoverall, mapping=aes(x=remove.factor(x, "numeric"), y=mean, ymin=mean-std.error.adj, ymax=mean+std.error.adj, colour=cond, width=0.9)) +
+             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) + ggtitle(paste("Participant", i, sep=" ")) + xlab(xlabel)
+      }else{
+        p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
+             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) + ggtitle(paste("Participant", i, sep=" ")) + xlab(xlabel)
+      }
 
     }
     print(p)
