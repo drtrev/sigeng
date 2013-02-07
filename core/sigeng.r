@@ -1769,8 +1769,12 @@ psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar
 }
 
 psignifit.run <- function(psignifit="~/ollik-home/utils/psignifit_3.0_beta.20120611.1/tests/dodds/analysesummary.py",
-                           summaryfilein="summary.txt",
-                           threshslopesfileout="rectwidth-data/threshslopes.txt")
+                          summaryfilein="summary.txt",
+                          threshslopesfileout="rectwidth-data/threshslopes.txt",
+                          nafc=1,
+                          bootstrapbayes="bootstrap",
+                          gammaislambda=T,
+                          constraints="'unconstrained'/'unconstrained'/'Uniform(0,0.1)'") # constrains separated by '/' cos comma used in prior functions
   # Get psignifit to analyse summary file and output thresholds, slopes, and other params
   # Returns false when not run (e.g. output file exists, chose not to overwrite) or true otherwise
 {
@@ -1786,7 +1790,7 @@ psignifit.run <- function(psignifit="~/ollik-home/utils/psignifit_3.0_beta.20120
       cat("Overwriting.\n")
     }else{
       cat("Not overwriting.\n")
-      return (F) # Not run
+      return (list(run=F, retval=0)) # Not run
       #stop("Stopping due to threshslopes file existing.")
     }
   }
@@ -1795,11 +1799,15 @@ psignifit.run <- function(psignifit="~/ollik-home/utils/psignifit_3.0_beta.20120
   cat("Analysing with psignifit...\n")
   
   # Then analyse it with psignifit
-  system(paste(psignifit, summaryfilein, threshslopesfileout, sep=" "))
+  if (gammaislambda) gammaislambda <- 'T'
+  else gammaislambda <- 'F'
+  retval <- system(paste(psignifit, summaryfilein, threshslopesfileout, nafc, bootstrapbayes, gammaislambda, constraints, sep=" "))
+  cat("Retval:")
+  print(retval)
   
   cat("Finished psignifit\n")
 
-  return (T) # run
+  return (list(run=T, retval=retval)) # run, value returned
 }
 
 psignifit.readthreshslope <- function(threshslopesfile="rectwidth-data/threshslopes.txt", idvar="id", condvar=NULL)
@@ -1827,12 +1835,20 @@ psignifit.readthreshslope <- function(threshslopesfile="rectwidth-data/threshslo
 
 psignifit.predict <- function(x, alpha, beta, gamma, lambda)
   # Predict the resulting function based on parameter estimates
+  # This function corresponds to the logistic function (Hill 2001)
 {
   y <- 1/(1+exp(-(x-alpha)/beta))
   y <- gamma + (1 - gamma - lambda) * y
   cat("gamma: ", gamma, ", lambda: ", lambda, "\n")
 
   return(y)
+}
+
+psignifit.threshold <- function(f=0.5, alpha, beta)
+# This function calculates Tf, and corresponds to the function for calculating the threshold, see Appendix of Hill (2001)
+# f is the threshold requested e.g. 0.5
+{
+  return (alpha - beta * log(1/f-1))
 }
 
 psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity")
@@ -1854,21 +1870,40 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
       my.model <- data.frame(x=min(temp.x):max(temp.x))
       my.model$y <- psignifit.predict(my.model$x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
 
+     
+
       colnames(DFpsiidcond)[colnames(DFpsiidcond)==condvar] <- "cond"
       my.model$cond <- cond
       #print(head(DFpsiidcond))
       #print(head(my.model))
+      # predict the y value of the threshold
+      # It turns out psignifit is returning the threshold based on the resulting y value, i.e. including the guesses and lapses!
+      # So let's just calculate it ourselves based on the fit from psignifit
+      # Ok that's the same - but it makes sense that it results as 0.5 because gammaislambda!!
+      threshold.x <- psignifit.threshold(0.5, DFthreshidcond$alpha, DFthreshidcond$beta) # same as DFthreshidcond$thresh_0.5
+      print(threshold.x)
+      threshold.y <- psignifit.predict(threshold.x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
+      print(threshold.y)
+      # (min(xs), ty) to end (tx, ty)
+      # (tx, ty) to end (tx, 0)
+      minxs <- min(remove.factor(DFpsi$x, "numeric"))
+      DFthresh.temp <- data.frame(x=c(minxs, threshold.x), xend=rep(threshold.x, 2), y=rep(threshold.y, 2), yend=c(threshold.y, 0), cond=cond)
+
       if (i == "all") {
         # use now the DFoverall for stderror etc.
+
         p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
              geom_errorbar(data=DFoverall, mapping=aes(x=remove.factor(x, "numeric"), y=mean, ymin=mean-std.error.adj, ymax=mean+std.error.adj, colour=cond, width=0.9)) +
-             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) + ggtitle(paste("Participant", i, sep=" ")) + xlab(xlabel)
+             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) +
+             geom_segment(data=DFthresh.temp, mapping=aes(x=x, xend=xend, y=y, yend=yend, colour=cond))
       }else{
         p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
-             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) + ggtitle(paste("Participant", i, sep=" ")) + xlab(xlabel)
+             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) +
+             geom_segment(data=DFthresh.temp, mapping=aes(x=x, xend=xend, y=y, yend=yend, colour=cond))
       }
 
     }
+    p <- p + ggtitle(paste("Participant", i, sep=" ")) + labs(x=xlabel, fill=condvar)
     print(p)
   }
 
