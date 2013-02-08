@@ -6,6 +6,7 @@
 
 #source("../libs/libs.R")
 library(ggplot2)
+library(WRS)
 #library(hash)
 
 checkForBetweenInteraction <- function(mysum, IDs, DVs, withinIVs, betweenIVs)
@@ -1671,7 +1672,9 @@ psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar
   if (is.null(condvar)) {
     #nocond <- T
     condvar <- "cond"
-    DF[,condvar] <- 1 # set up a dummary cond var, so it can be easily processed by psignifit script
+    DF[,condvar] <- factor(1) # set up a dummy cond var, so it can be easily processed by psignifit script
+  }else{
+    if (!is.factor(DF[,condvar])) stop("Error, condvar must be a factor")
   }
   
   res <- NULL
@@ -1726,6 +1729,7 @@ psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar
   # Note I've left the mean.adj in the adjusted values even though it should be the same
   # This allows for a quick check (e.g. it could be different if there are between subject elements)
   #print(res[,condvar])
+  #print(head(res))
   res.adj <- res
   res.adj$variable <- paste(res.adj[,condvar], res.adj$x, sep=".")
   res.adj$variable <- factor(res.adj$variable)
