@@ -1855,9 +1855,16 @@ psignifit.threshold <- function(f=0.5, alpha, beta)
   return (alpha - beta * log(1/f-1))
 }
 
-psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity")
+psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity", threshold=T, nothreshleft=F, nothreshdown=F)
+  # Parameters:
+  # DFthresh from psignifit.readthreshslope
+  # DFpsi from DFsum$psignifit from DFsum <- psignifit.summariseFor
+  # DFoverall from DFsum$overall
   # Plot, with only ids or conds.
   # When null, use them all.
+  # threshold is T/F, display threshold line
+  # nothreshleft is T/F, hide horizontal part of line
+  # nothreshdown is T/F, hide vertical part of line
 {
 
   if (is.null(ids))   { if (is.factor(DFthresh[,idvar]))   ids   <- levels(DFthresh[,idvar])   else ids   <- DFthresh[,idvar] }
@@ -1880,30 +1887,38 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
       my.model$cond <- cond
       #print(head(DFpsiidcond))
       #print(head(my.model))
-      # predict the y value of the threshold
-      # It turns out psignifit is returning the threshold based on the resulting y value, i.e. including the guesses and lapses!
-      # So let's just calculate it ourselves based on the fit from psignifit
-      # Ok that's the same - but it makes sense that it results as 0.5 because gammaislambda!!
-      threshold.x <- psignifit.threshold(0.5, DFthreshidcond$alpha, DFthreshidcond$beta) # same as DFthreshidcond$thresh_0.5
-      print(threshold.x)
-      threshold.y <- psignifit.predict(threshold.x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
-      print(threshold.y)
-      # (min(xs), ty) to end (tx, ty)
-      # (tx, ty) to end (tx, 0)
-      minxs <- min(remove.factor(DFpsi$x, "numeric"))
-      DFthresh.temp <- data.frame(x=c(minxs, threshold.x), xend=rep(threshold.x, 2), y=rep(threshold.y, 2), yend=c(threshold.y, 0), cond=cond)
+
+      
 
       if (i == "all") {
         # use now the DFoverall for stderror etc.
 
         p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
              geom_errorbar(data=DFoverall, mapping=aes(x=remove.factor(x, "numeric"), y=mean, ymin=mean-std.error.adj, ymax=mean+std.error.adj, colour=cond, width=0.9)) +
-             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) +
-             geom_segment(data=DFthresh.temp, mapping=aes(x=x, xend=xend, y=y, yend=yend, colour=cond))
+             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond))
       }else{
         p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
-             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond)) +
-             geom_segment(data=DFthresh.temp, mapping=aes(x=x, xend=xend, y=y, yend=yend, colour=cond))
+             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond))
+      }
+
+      if (nothreshleft && nothreshdown) threshold <- F
+      if (threshold) {
+        # predict the y value of the threshold
+        # I thought psignifit is returning the threshold based on the resulting y value, i.e. including the guesses and lapses!
+        # So I calculated it myself based on the fit from psignifit
+        # Then I found it's the same - but it makes sense that it results as 0.5 because gammaislambda!!
+        threshold.x <- psignifit.threshold(0.5, DFthreshidcond$alpha, DFthreshidcond$beta) # same as DFthreshidcond$thresh_0.5
+        print(threshold.x)
+        threshold.y <- psignifit.predict(threshold.x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
+        print(threshold.y)
+        # (min(xs), ty) to end (tx, ty)
+        # (tx, ty) to end (tx, 0)
+        minxs <- min(remove.factor(DFpsi$x, "numeric"))
+        DFthresh.temp <- data.frame(x=c(minxs, threshold.x), xend=rep(threshold.x, 2), y=rep(threshold.y, 2), yend=c(threshold.y, 0), cond=cond)
+        if (nothreshleft) DFthresh.temp <- DFthresh.temp[2,]
+        if (nothreshdown) DFthresh.temp <- DFthresh.temp[1,]
+
+        p <- p + geom_segment(data=DFthresh.temp, mapping=aes(x=x, xend=xend, y=y, yend=yend, colour=cond), linetype=2)
       }
 
     }
