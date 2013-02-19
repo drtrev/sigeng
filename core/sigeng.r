@@ -625,6 +625,22 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
           opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
           filenames=filenames))
   }
+  if (length(betweenIVs) == 1 && length(withinIVs) == 1) {
+    # x between, fill within
+    plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
+          ylab=dv, y=dv, fill=withinIVs[1], filllab=withinIVs[1], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
+          facet=NULL, type="bar",
+          opts=NULL,
+          filenames=filenames))
+  }
+  if (length(betweenIVs) == 1 && length(withinIVs) == 0) {
+    # x factor1
+    plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
+          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
+          facet=NULL, type="bar",
+          opts=NULL,
+          filenames=filenames))
+  }
 
   if (length(betweenIVs) == 0 && length(withinIVs) == 3) {
     # facet factor1, x factor2, fill factor3
@@ -646,14 +662,6 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
   if (length(betweenIVs) == 0 && length(withinIVs) == 1) {
     # x factor1
     plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
-          ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
-          facet=NULL, type="bar",
-          opts=NULL,
-          filenames=filenames))
-  }
-  if (length(betweenIVs) == 1 && length(withinIVs) == 0) {
-    # x factor1
-    plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
           ylab=dv, y=dv, fill=NULL, filllab=NULL, scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
           facet=NULL, type="bar",
           opts=NULL,
@@ -907,6 +915,7 @@ doplot <- function(dv, params)
         if (is.null(meansdf)) meansdf <- temp
         else meansdf <- rbind(meansdf, temp)
         
+        print(meansdf)
         #for (wiv in withinIVs) {
         #  temp <- data.frame(means=tapply(DFsub[,dv], DFsub[,wiv], mean), stderrs=tapply(DFsub[,dv], DFsub[,wiv], std.error), wiv=levels(DFsub[,wiv]), biv=i)
         #  if (is.null(meansdf)) meansdf <- temp
@@ -916,10 +925,21 @@ doplot <- function(dv, params)
       }
 
       rownames(meansdf) <- NULL
-      colnames(meansdf)[3] <- "condition"
-      colnames(meansdf)[4:(ncol(meansdf)-1)] <- withinIVs # -1 for biv
-      for (tempcol in withinIVs) meansdf[,tempcol] <- factor(meansdf[,tempcol], levels=levels(DF[,tempcol]))
-      meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
+      #colnames(meansdf)[3] <- "condition"
+      colnames(meansdf)[3:(ncol(meansdf)-1)] <- withinIVs # -1 for biv
+      for (tempcol in withinIVs) {
+        # If it was a factor, then make it a factor in meansdf also.
+        # It will actually always be a factor, because that was needed to adjust the error bars (calcadj) and to generate conc
+        # but here we sort out the levels, and remove the factor if it originally wasn't one
+        if (is.factor(DF[,tempcol])) {
+          meansdf[,tempcol] <- factor(meansdf[,tempcol], levels=levels(DF[,tempcol]))
+        }else{
+          meansdf[,tempcol] <- remove.factor(meansdf[,tempcol], convert=class(DF[,tempcol]))
+        }
+      }
+      if (is.factor(DF[,biv])) meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
+      #print(meansdf)
+      print(str(meansdf))
       row.names(meansdf) <- NULL
       #attr(meansdf$means, "names") <- NULL # calcadj should do this really
       #attr(meansdf$stderrs, "names") <- NULL
@@ -927,12 +947,12 @@ doplot <- function(dv, params)
 
       summarydf <- calcSummaryDF(DF, biv, dv)
 
-      if (length(withinIVs) == 1) {
-        colnames(meansdf)[4] <- "wiv"
-        plotwivbiv(meansdf, dv)
-      }else{
+      #if (length(withinIVs) == 1) {
+      #  colnames(meansdf)[4] <- "wiv"
+      #  plotwivbiv(meansdf, dv)
+      #}else{
         ploteng(DF, meansdf, summarydf, plothashes=plothashes, nosave=params$settings$noplotsave)
-      }
+      #}
 
     }else{
 
@@ -1107,11 +1127,14 @@ robustanova <- function(dv, params)
   # TODO could also use ranked based methods - this here is trimmed means
   if (length(betweenIVs) == 0 && length(withinIVs) == 1) {
     cat("Detected no bivs and 1 wiv\n")
-    print(withinIVs)
+    print(withinIVs[1])
     # Just within, can use rmanova from WRS package
     # Get groups as columns, pass it as matrix
-    m <- melt(DF)
-    m <- m[m$variable==dv,]
+    # Get rid of variables we don't need
+    DFtemp <- DF[,c(IDs, withinIVs[1], dv)]
+    m <- melt(DFtemp, id.vars=c(IDs, withinIVs[1]))
+    # We've already got rid of variables we don't need, so no need for this now
+    #m <- m[m$variable==dv,]
     # If we're redoing then this withinIV might not cover all the data, so first get the columns we're interested in
     m <- m[,c(IDs, "value", "variable", withinIVs[1])]
     command <- paste("DFwide <- as.matrix(cast(m, ... ~ variable + ", withinIVs[1], ", fun.aggregate=mean))", sep="")
@@ -1266,6 +1289,24 @@ doanova <- function(dv, params)
     sink()
   }
 
+  # Do linear model, useful e.g. in case IVs are numeric (not factor)
+  command <- paste("my.lm <- lm(", dv, " ~ ", sep="")
+  for (iv in withinIVs) {
+    if (iv == withinIVs[1]) { command <- paste(command, iv, sep="") }
+    else { command <- paste(command, " * ", iv, sep="") }
+  }
+  for (iv in betweenIVs) {
+    if (iv == betweenIVs[1] && length(withinIVs)==0) { command <- paste(command, iv, sep="") }
+    else { command <- paste(command, " * ", iv, sep="") }
+  }
+  command <- paste(command, ", data=DF)", sep="")
+  eval(parse(text=command))
+  if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
+    cat(params$redolevelsp, "+ ", command, "\n", sep="")
+    print(summary(my.lm))
+  if (!params$settings$noanovasave) sink()
+  
+
   # Store residuals for diagnostic plots
   my.resids <- NULL
   if (length(withinIVs) > 0) {
@@ -1283,6 +1324,7 @@ doanova <- function(dv, params)
     if (!params$settings$noanovasave) sink(params$logfile, split=T, append=T)
       cat(params$redolevelsp, "+ ", command, "\n", sep="")
       eval(parse(text=command))
+      #print(summary(my.lm))
       cat(params$redolevelsp, "+ my.resids <- residuals(my.lm)\n", sep="")
       my.resids <- residuals(my.lm)
     if (!params$settings$noanovasave) sink()
@@ -1539,6 +1581,7 @@ sigengdv <- function(params)
 # noanova noplot and nosave (figs) are to speed things up when testing
 # brute is for brute force checking, where outs$test checks the cache for outliers (=no. of outliers to remove), outs$retest forces a rebuild of the cache, pitac is for problematic collaborators, generates loads of figures TODO
 # outs$ignore will not remove those IDs, used with outs$test and outs$retest
+# TODO check IVs continuous or factor
 sigeng <- function(DF, analysisID="default", IDs="id", DVs=c("value"), withinIVs=c("cond"), betweenIVs=NULL, blocks=NULL, plothashes=NULL,
                    brute=list(outs=list(test=0, retest=0, ignore=NULL), pitac=F), cachepath="~/.sigeng/cache",
                    logfile="/tmp/sigenglog.txt", clobberlog=T, anovafile="/tmp/anova.txt", ...)
