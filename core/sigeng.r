@@ -641,7 +641,7 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
       # put it on x axis
       # x within, fill between
       plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=unique(DF[,withinIVs[1]]), xticbreaks=unique(DF[,withinIVs[1]]),
-            ylab=dv, y=dv, fill=betweenIVs[1], filllab=betweenIVs[1], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
+            ylab=dv, y=dv, fill=betweenIVs[1], filllab=betweenIVs[1], filllabs=levels(DF[,betweenIVs[1]]), fillbreaks=levels(DF[,betweenIVs[1]]), scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
             facet=NULL, type="point",
             opts=NULL,
             filenames=filenames))
@@ -1451,6 +1451,7 @@ brute.outs <- function(params)
   cat(paste0("ID var: ", params$IDs, "\n"))
   IDs <- params$DF[, params$IDs]
   print(IDs)
+  # TODO remove warning and fix
   warning("General reminder: Brute.outs does not work when IDs are not numeric yet")
   if (is.factor(IDs)) IDs <- as.integer(levels(IDs)) # TODO deal with levels that are string, i.e. change this function a bit
   else IDs <- unique(IDs)
