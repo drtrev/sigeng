@@ -270,6 +270,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   layers <- list()
   plotOptions <- list()
   signifDFs <- NULL
+  xContinuous <- F
 
   # Default: boxplot
   if (is.null(plothash[["type"]])) plothash[["type"]] <- "boxplot"
@@ -299,6 +300,13 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
     dodge <- position_dodge(width=0.9)
 
+    # You can still plot without converting to a factor and it works, but I left this in just in case
+    if (!is.null(plothash[["xfactor"]]) && plothash[["xfactor"]]) {
+      cat("Converting x to factor for plotting...\n")
+      meansDF[,plothash[["x"]]] <- factor(meansDF[,plothash[["x"]]], levels=unique(meansDF[,plothash[["x"]]]))
+      print(str(meansDF))
+    }
+
     # Here is how you can do it by converting mapping to a str and evaluating the code
     #mappingstr <- paste(names(mapping), mapping, collapse=", ", sep="=")
     #plottype <- list(paste("geom_bar(data=meansDF, mapping=aes(", mappingstr, "), position=dodge, stat=\"identity\")", sep=""))
@@ -306,6 +314,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     #layers <- geom_bar(data=meansDF, mapping=aes_list(mapping), stat="identity", position=dodge)
     mapping <- aes_string(x=plothash[["x"]], y=means, fill=plothash[["fill"]])
     layers <- geom_bar(data=meansDF, mapping=mapping, stat="identity", position=dodge)
+
+    if (!is.factor(meansDF[,plothash[["x"]]])) xContinuous <- T
 
     ##command <- paste("limits <- aes(x=", plothash[["x"]], ", y=", means, ", ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
     ##cat(command, "\n")
@@ -315,8 +325,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
 
     #mapping <- list(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
-    mapping <- aes_string(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs))
-    layers <- c(layers, geom_errorbar(data=meansDF, mapping=mapping, width=0.1, position=dodge))
+    mapping <- aes_string(x=plothash[["x"]], y=means, ymin=paste0(means, "-", stderrs), ymax=paste0(means, "+", stderrs), fill=plothash[["fill"]])
+    layers <- c(layers, geom_errorbar(data=meansDF, position=dodge, mapping=mapping, width=0.1))
 
     ylimits <- c(ylimits, meansDF[,means] - meansDF[,stderrs] - 0.1, meansDF[,means] + meansDF[,stderrs] + 0.1)
 
@@ -427,12 +437,13 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   # Then add layers that are usually the same, with some checks on plottype where necessary
   
-  if (plothash[["type"]] == "psycho") {
-    # TODO just add to options
-    #command <- paste(command, " + scale_x_continuous(name=\"", plothash[["xlab"]],
-    #                          "\", labels=c(\"", paste(plothash[["xticlabs"]], collapse='","', sep=""), "\"),", sep="")
-    # without quote marks around breaks, i.e. continuous var not factor
-    #command <- paste(command, " breaks=c(", paste(plothash[["xticbreaks"]], collapse=',', sep=""), "))", sep="")
+  if (plothash[["type"]] == "psycho" || xContinuous) {
+    ## TODO just add to options
+    # Note this was just for psycho:
+    ##command <- paste(command, " + scale_x_continuous(name=\"", plothash[["xlab"]],
+    ##                          "\", labels=c(\"", paste(plothash[["xticlabs"]], collapse='","', sep=""), "\"),", sep="")
+    ## without quote marks around breaks, i.e. continuous var not factor
+    ##command <- paste(command, " breaks=c(", paste(plothash[["xticbreaks"]], collapse=',', sep=""), "))", sep="")
 
     # Continuous
     plotOptions <- c(plotOptions, "scale_x_continuous(name=plothash[[\"xlab\"]], labels=plothash[[\"xticlabs\"]], breaks=as.numeric(plothash[[\"xticbreaks\"]]))")
@@ -626,12 +637,22 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
           filenames=filenames))
   }
   if (length(betweenIVs) == 1 && length(withinIVs) == 1) {
-    # x between, fill within
-    plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
-          ylab=dv, y=dv, fill=withinIVs[1], filllab=withinIVs[1], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
-          facet=NULL, type="bar",
-          opts=NULL,
-          filenames=filenames))
+    if (!is.factor(withinIVs)) {
+      # put it on x axis
+      # x within, fill between
+      plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=unique(DF[,withinIVs[1]]), xticbreaks=unique(DF[,withinIVs[1]]),
+            ylab=dv, y=dv, fill=betweenIVs[1], filllab=betweenIVs[1], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
+            facet=NULL, type="point",
+            opts=NULL,
+            filenames=filenames))
+    }else{
+      # x between, fill within
+      plothashes <- list(list(xlab=betweenIVs[1], x=betweenIVs[1], xticlabs=levels(DF[,betweenIVs[1]]), xticbreaks=levels(DF[,betweenIVs[1]]),
+            ylab=dv, y=dv, fill=withinIVs[1], filllab=withinIVs[1], scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
+            facet=NULL, type="bar",
+            opts=NULL,
+            filenames=filenames))
+    }
   }
   if (length(betweenIVs) == 1 && length(withinIVs) == 0) {
     # x factor1
@@ -939,8 +960,8 @@ doplot <- function(dv, params)
       }
       if (is.factor(DF[,biv])) meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
       #print(meansdf)
-      print(str(meansdf))
       row.names(meansdf) <- NULL
+      #print(str(meansdf))
       #attr(meansdf$means, "names") <- NULL # calcadj should do this really
       #attr(meansdf$stderrs, "names") <- NULL
       print(meansdf)
