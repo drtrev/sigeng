@@ -1451,13 +1451,20 @@ brute.outs <- function(params)
   cat(paste0("ID var: ", params$IDs, "\n"))
   IDs <- params$DF[, params$IDs]
   print(IDs)
-  # TODO remove warning and fix
-  warning("General reminder: Brute.outs does not work when IDs are not numeric yet")
-  if (is.factor(IDs)) IDs <- as.integer(levels(IDs)) # TODO deal with levels that are string, i.e. change this function a bit
-  else IDs <- unique(IDs)
+  #if (is.factor(IDs)) IDs <- as.integer(levels(IDs)) # TODO deal with levels that are string, i.e. change this function a bit
+  #else IDs <- unique(IDs)
 
-  startID <- min(IDs)
-  endID <- max(IDs)
+  IDs.numeric <- IDs
+  if (is.factor(IDs)) {
+    # generate numeric IDs, because algorithm needs to start from i to endID
+    IDs.numeric <- rep(-1, times=length(levels(IDs))) # make array, default -1
+    for (i in 1:length(levels(IDs))) { # set elements of the array to increase
+      IDs.numeric[i] <- i
+    }
+    print(IDs.numeric)
+  }
+  startID <- min(IDs.numeric)
+  endID <- max(IDs.numeric)
 
   cat(paste0("startID: ", startID, "\n"))
   cat(paste0("endID: ", endID, "\n"))
@@ -1476,7 +1483,15 @@ brute.outs <- function(params)
         do.call(cat, list(outs, sep=","))
         cat("\n")
         DFbak <- params$DF
-          params$DF <- params$DF[!(params$DF$id %in% outs),]
+          if (is.factor(IDs)) {
+            # lookup outlier number, i.e. levels(IDs)[outs]
+            cat("Removing the following outliers:\n")
+            print(levels(IDs)[outs])
+            params$DF <- params$DF[!(params$DF$id %in% levels(IDs)[outs]),]
+          }else{
+            # if numeric, this is fine
+            params$DF <- params$DF[!(params$DF$id %in% outs),]
+          }
           myeng <- sigengdv(params)
         params$DF <- DFbak
         #cat("Anova in brute:\n")
@@ -1484,14 +1499,23 @@ brute.outs <- function(params)
         pval <- summary(myeng$anova.results$my.aov)[[2]][[1]][["Pr(>F)"]][1]
         if (is.null(myeng$anova.results$robust)) pval2 <- 1
         else pval2 <- myeng$anova.results$robust$siglevel
-        if ((pval <= 0.05 || pval2 <= 0.05) && !identical(outs, as.integer(params$brute$outs$ignore))) {
+
+        matchedToIgnore <- F
+        if (is.factor(IDs)) matchedToIgnore <- identical(levels(IDs)[outs], params$brute$outs$ignore)
+        else matchedToIgnore <- identical(outs, as.integer(params$brute$outs$ignore))
+
+        if ((pval <= 0.05 || pval2 <= 0.05) && !matchedToIgnore) {
           #print(outs)
           sigtest <- NULL
           if (pval <= 0.05) sigtest <- "normal"
           if (pval2 <= 0.05) sigtest <- c(sigtest, "robust")
           #print(sigtest)
           #myouts <- c(myouts, list(myeng=myeng, outs=outs, sigtest=sigtest))
-          myouts <- c(myouts, list(outs=outs, sigtest=sigtest))
+          if (is.factor(IDs)) {
+            myouts <- c(myouts, list(outs=levels(IDs)[outs], sigtest=sigtest))
+          }else{
+            myouts <- c(myouts, list(outs=outs, sigtest=sigtest))
+          }
           #finished=T
           #break;
         }
