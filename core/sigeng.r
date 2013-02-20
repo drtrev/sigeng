@@ -304,7 +304,7 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     if (!is.null(plothash[["xfactor"]]) && plothash[["xfactor"]]) {
       cat("Converting x to factor for plotting...\n")
       meansDF[,plothash[["x"]]] <- factor(meansDF[,plothash[["x"]]], levels=unique(meansDF[,plothash[["x"]]]))
-      print(str(meansDF))
+      str(meansDF)
     }
 
     # Here is how you can do it by converting mapping to a str and evaluating the code
@@ -619,6 +619,15 @@ makeplothashes <- function(DF, dv, withinIVs, betweenIVs)
 
   plothashes <- NULL
 
+  if (length(betweenIVs) == 2 && length(withinIVs) == 1) {
+    # facet biv1, fill biv2, x wiv
+    plothashes <- list(list(xlab=withinIVs[1], x=withinIVs[1], xticlabs=levels(DF[,withinIVs[1]]), xticbreaks=levels(DF[,withinIVs[1]]),
+          ylab=dv, y=dv, fill=betweenIVs[2], filllab=betweenIVs[2], filllabs=levels(DF[,betweenIVs[2]]), fillbreaks=levels(DF[,betweenIVs[2]]), scale_fill=NULL, signif=NULL, text=NULL, width=NULL,
+          facet=paste("grid(", betweenIVs[1], " ~ .)", sep=""), type="bar",
+          opts="axis.title.x=theme_text(size=12, vjust=0), axis.title.y=theme_text(size=12, vjust=0.4, angle=90)", #, panel.margin=unit(0.5, \"cm\")",
+          filenames=filenames))
+  }
+
   if (length(betweenIVs) == 1 && length(withinIVs) == 3) {
     # facet factor1, x factor2, fill factor3
     plothashes <- list(list(xlab=withinIVs[2], x=withinIVs[2], xticlabs=levels(DF[,withinIVs[2]]), xticbreaks=levels(DF[,withinIVs[2]]),
@@ -864,6 +873,62 @@ diagnosticplot <- function(dv, resids)
   print(p)
 }
 
+calcadj.biv <- function(DF, dv, betweenIVs)
+# Adjustment for within subject error is done for each group of subjects (e.g. each level of the between subject variable)
+{
+  if (length(betweenIVs)==1) {
+    # base case
+    #cat("Base case\n")
+    biv <- betweenIVs[1]
+    #print(biv)
+    #print(levels(DF[,biv]))
+    meansdf <- NULL
+    for (i in levels(DF[,biv])) {
+      DFsub <- DF[DF[,biv]==i,]
+      #print(DFsub)
+
+      # correct within error bars for subset only
+      temp <- calcadj(DFsub, variable="conc", value=dv)
+      temp[,biv] <- unique(DFsub[,biv])
+
+      meansdf <- rbind(meansdf, temp)
+      
+      #print(meansdf)
+      #for (wiv in withinIVs) {
+      #  temp <- data.frame(means=tapply(DFsub[,dv], DFsub[,wiv], mean), stderrs=tapply(DFsub[,dv], DFsub[,wiv], std.error), wiv=levels(DFsub[,wiv]), biv=i)
+      #  if (is.null(meansdf)) meansdf <- temp
+      #  else meansdf <- rbind(meansdf, temp)
+      #  print(meansdf)
+      #}
+    }
+
+    row.names(meansdf) <- NULL
+    return(meansdf)
+  }else{
+    # cut down DF and recurse for each level
+    # start with outermost (last) biv
+    cat("Not base case\n")
+    biv <- betweenIVs[length(betweenIVs)]
+    #print(biv)
+    #print(levels(DF[,biv]))
+    meansdf <- NULL
+    betweenIVs.temp <- betweenIVs[1:(length(betweenIVs)-1)]
+    for (i in levels(DF[,biv])) {
+      DFsub <- DF[DF[,biv]==i,]
+      DFsub$biv <- NULL
+      #print(DFsub)
+      #print(betweenIVs.temp)
+      meansdf.temp <- calcadj.biv(DFsub, dv, betweenIVs.temp)
+      meansdf.temp <- cbind(meansdf.temp, i)
+      colnames(meansdf.temp)[length(colnames(meansdf.temp))] <- biv
+      meansdf <- rbind(meansdf, meansdf.temp)
+      #print(meansdf)
+    }
+    return(meansdf)
+  }
+
+}
+
 doplot <- function(dv, params)
   # this is the main wrapper for all plotting
   # ploteng plots based on the hash information, and accepts a list of hashes (one for each plot)
@@ -919,52 +984,33 @@ doplot <- function(dv, params)
     #print(paste("wiv: ", wiv, ", biv: ", biv))
     # Could probably use summaryBy here:
 
-    if (length(betweenIVs) > 0) cat("Only using one biv right now\n")
+    #if (length(betweenIVs) > 2) cat("MAX 2 BIVs RIGHT NOW\n")
 
     if (!is.null(withinIVs)) {
 
       DF$conc <- getConc(DF, withinIVs)
 
-      for (i in levels(DF[,biv])) {
-        DFsub <- DF[DF[,biv]==i,]
-        #print(head(DFsub))
-
-        # correct within error bars for subset only
-        temp <- calcadj(DFsub, variable="conc", value=dv)
-        temp[,biv] <- unique(DFsub[,biv])
-
-        if (is.null(meansdf)) meansdf <- temp
-        else meansdf <- rbind(meansdf, temp)
-        
-        print(meansdf)
-        #for (wiv in withinIVs) {
-        #  temp <- data.frame(means=tapply(DFsub[,dv], DFsub[,wiv], mean), stderrs=tapply(DFsub[,dv], DFsub[,wiv], std.error), wiv=levels(DFsub[,wiv]), biv=i)
-        #  if (is.null(meansdf)) meansdf <- temp
-        #  else meansdf <- rbind(meansdf, temp)
-        #  print(meansdf)
-        #}
-      }
-
-      rownames(meansdf) <- NULL
-      #colnames(meansdf)[3] <- "condition"
-      colnames(meansdf)[3:(ncol(meansdf)-1)] <- withinIVs # -1 for biv
-      for (tempcol in withinIVs) {
-        # If it was a factor, then make it a factor in meansdf also.
-        # It will actually always be a factor, because that was needed to adjust the error bars (calcadj) and to generate conc
-        # but here we sort out the levels, and remove the factor if it originally wasn't one
-        if (is.factor(DF[,tempcol])) {
-          meansdf[,tempcol] <- factor(meansdf[,tempcol], levels=levels(DF[,tempcol]))
-        }else{
-          meansdf[,tempcol] <- remove.factor(meansdf[,tempcol], convert=class(DF[,tempcol]))
-        }
-      }
-      if (is.factor(DF[,biv])) meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
-      #print(meansdf)
-      row.names(meansdf) <- NULL
-      #print(str(meansdf))
-      #attr(meansdf$means, "names") <- NULL # calcadj should do this really
-      #attr(meansdf$stderrs, "names") <- NULL
+      print(betweenIVs)
+      meansdf <- calcadj.biv(DF, dv, betweenIVs)
+      colnames(meansdf)[3:(ncol(meansdf)-length(betweenIVs))] <- withinIVs
+      cat("MeansDF:\n")
       print(meansdf)
+      str(meansdf)
+
+      ##rownames(meansdf) <- NULL
+      ##colnames(meansdf)[3] <- "condition"
+      #for (tempcol in withinIVs) {
+      #  # If it was a factor, then make it a factor in meansdf also.
+      #  # It will actually always be a factor, because that was needed to adjust the error bars (calcadj) and to generate conc
+      #  # but here we sort out the levels, and remove the factor if it originally wasn't one
+      #  if (is.factor(DF[,tempcol])) {
+      #    meansdf[,tempcol] <- factor(meansdf[,tempcol], levels=levels(DF[,tempcol]))
+      #  }else{
+      #    meansdf[,tempcol] <- remove.factor(meansdf[,tempcol], convert=class(DF[,tempcol]))
+      #  }
+      #}
+      #if (is.factor(DF[,biv])) meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
+      ##print(meansdf)
 
       summarydf <- calcSummaryDF(DF, biv, dv)
 
