@@ -1944,7 +1944,7 @@ psignifit.threshold <- function(f=0.5, alpha, beta)
   return (alpha - beta * log(1/f-1))
 }
 
-psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity", threshold=T, nothreshleft=F, nothreshdown=F)
+psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity", titleprefix="", threshold=T, nothreshleft=F, nothreshdown=F)
   # Parameters:
   # DFthresh from psignifit.readthreshslope
   # DFpsi from DFsum$psignifit from DFsum <- psignifit.summariseFor
@@ -2011,7 +2011,7 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
       }
 
     }
-    p <- p + ggtitle(paste("Participant", i, sep=" ")) + labs(x=xlabel, fill=condvar)
+    p <- p + ggtitle(paste(titleprefix, "Participant", i, sep=" ")) + labs(x=xlabel, fill=condvar)
     print(p)
   }
 
