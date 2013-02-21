@@ -1990,7 +1990,7 @@ psignifit.threshold <- function(f=0.5, alpha, beta)
   return (alpha - beta * log(1/f-1))
 }
 
-psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity", titleprefix=NULL, title=NULL, threshold=T, nothreshleft=F, nothreshdown=F)
+psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity", xticbreaks="auto", xticlabs="auto", titleprefix=NULL, title=NULL, threshold=T, nothreshleft=F, nothreshdown=F)
   # Parameters:
   # DFthresh from psignifit.readthreshslope
   # DFpsi from DFsum$psignifit from DFsum <- psignifit.summariseFor
@@ -2006,7 +2006,10 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
   if (is.null(conds)) { if (is.factor(DFthresh[,condvar])) conds <- levels(DFthresh[,condvar]) else conds <- DFthresh[,condvar] }
 
   for (i in ids) {
+
     p <- ggplot()
+    if (xticbreaks != "auto" && xticlabs != "auto") p <- p + scale_x_continuous(breaks=xticbreaks, labels=xticlabs)
+
     for (cond in conds) {
       #DFidcond <- DF[DF[,idvar]==i & DF[,condvar]==cond,]
       DFthreshidcond <- DFthresh[DFthresh[,idvar]==i & DFthresh[,condvar]==cond,]
