@@ -33,6 +33,15 @@ remove.factor <- function(x, convert="character") {
   eval(parse(text=command))
 }
 
+remove.levels <- function(DF, var, remove)
+# e.g. DF <- remove.level(DF, "id", c(1, 2, 3)) to remove participants 1, 2 and 3
+# The point of this is it recreates the factor
+{
+  DF <- DF[!(DF[,var] %in% remove),]
+  DF[,var] <- factor(DF[,var])
+  DF
+}
+
 vsubset <- function(...)
 {
   subset(...)[,1]
@@ -45,7 +54,7 @@ calcadj <- function(df1, id="id", variable="variable", value="value", variableID
   # Adjust separately, e.g. calcadj(df1[study=="1",],...)
 {
   if (!(id %in% colnames(df1))) {
-    stop(paste("Calcadj: Error, id column'", id, "' not found", sep=""))
+    stop(paste("Calcadj: Error, id column '", id, "' not found", sep=""))
   }
   if (!(variable %in% colnames(df1))) {
     stop(paste("Calcadj: Error, variable column '", variable, "' not found", sep=""))
@@ -62,12 +71,12 @@ calcadj <- function(df1, id="id", variable="variable", value="value", variableID
 
   # error check
   if (!is.factor(ids)) {
-    cat("Error: id must be a factor")
-    return(NULL)
+    stop("Calcadj error: id must be a factor")
+    #return(NULL)
   }
   if (!is.factor(variables)) {
-    cat("Error: variables must be a factor")
-    return(NULL)
+    stop("Calcadj error: variables must be a factor")
+    #return(NULL)
   }
 
   idmeans <- foreach(i=1:length(levels(ids)), .combine = "data.frame") %do% {
