@@ -883,6 +883,7 @@ calcadj.biv <- function(DF, dv, betweenIVs)
     #print(biv)
     #print(levels(DF[,biv]))
     meansdf <- NULL
+    # TODO optimise with tapply
     for (i in levels(DF[,biv])) {
       DFsub <- DF[DF[,biv]==i,]
       #print(DFsub)
@@ -913,6 +914,7 @@ calcadj.biv <- function(DF, dv, betweenIVs)
     #print(levels(DF[,biv]))
     meansdf <- NULL
     betweenIVs.temp <- betweenIVs[1:(length(betweenIVs)-1)]
+    # TODO optimise with tapply
     for (i in levels(DF[,biv])) {
       DFsub <- DF[DF[,biv]==i,]
       DFsub$biv <- NULL
@@ -2061,10 +2063,10 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
 
     }
     if (is.null(title)) {
-      if (is.null(titleprefix)) title <- paste("Participant", i, sep=" ")
-      else title <- paste(titleprefix, "Participant", i, sep=" ")
-    }
-    p <- p + ggtitle(title) + labs(x=xlabel, fill=condvar)
+      if (is.null(titleprefix)) title.current <- paste("Participant", i, sep=" ")
+      else title.current <- paste(titleprefix, "Participant", i, sep=" ")
+    }else title.current <- title
+    p <- p + ggtitle(title.current) + labs(x=xlabel, fill=condvar)
     print(p)
   }
 
