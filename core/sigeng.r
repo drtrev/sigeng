@@ -316,6 +316,10 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     layers <- geom_bar(data=meansDF, mapping=mapping, stat="identity", position=dodge)
 
     if (!is.factor(meansDF[,plothash[["x"]]])) xContinuous <- T
+    cat("xContinuous:\n")
+    print(xContinuous)
+    cat("plothash[[x]]:\n")
+    print(plothash[["x"]])
 
     ##command <- paste("limits <- aes(x=", plothash[["x"]], ", y=", means, ", ymin=", means, "-", stderrs, ", ymax=", means, "+", stderrs, ")", sep="")
     ##cat(command, "\n")
@@ -845,9 +849,24 @@ getConc <- function(DF, withinIVs)
     # if withinIVs contain the separator char, replace it
     tempDF <- DF
     for (i in withinIVs) {
-      tempDF[,i] <- factor(gsub('\\.', '_', tempDF[,i]), levels=levels(DF[,i])) # need factor here because the levels are used below
+
+      if (!is.factor(DF[,i])) {
+        warning("getConc: conc is converting a withinIV to a factor; concatenation not implemented for numeric.")
+        tempDF[,i] <- factor(tempDF[,i])
+      }
+
+      if (is.factor(DF[,i]))
+        my.levels.temp <- levels(DF[,i])
+      else
+        my.levels.temp <- levels(tempDF[,i]) # preserve levels if we can
+
+      tempDF[,i] <- factor(gsub('\\.', '_', tempDF[,i]), levels=my.levels.temp) # need factor here because the levels are used below
     }
+    #cat("head tempDF:\n")
+    #print(head(tempDF))
     conc <- do.call(paste, c(tempDF[,withinIVs], sep="."))
+    #cat("conc:\n")
+    #print(conc)
     # get levels in same order as the previous levels (hopefully what the user wants)
     my.levels.temp <- lapply(tempDF[,withinIVs], levels)
     #print(my.levels.temp)
@@ -886,6 +905,7 @@ calcadj.biv <- function(DF, dv, betweenIVs)
     # TODO optimise with tapply
     for (i in levels(DF[,biv])) {
       DFsub <- DF[DF[,biv]==i,]
+      #cat("DFsub:\n")
       #print(DFsub)
 
       # correct within error bars for subset only
@@ -994,7 +1014,15 @@ doplot <- function(dv, params)
 
       print(betweenIVs)
       meansdf <- calcadj.biv(DF, dv, betweenIVs)
-      colnames(meansdf)[3:(ncol(meansdf)-length(betweenIVs))] <- withinIVs
+      cat("MeansDF:\n")
+      print(meansdf)
+      if (length(withinIVs) > 1) # we have conc
+        colnames(meansdf)[4:(ncol(meansdf)-length(betweenIVs))] <- withinIVs
+      else
+        colnames(meansdf)[3:(ncol(meansdf)-length(betweenIVs))] <- withinIVs
+      for (i in withinIVs) {
+        if (is.factor(DF[,i])) meansdf[,i] <- factor(meansdf[,i], levels=levels(DF[,i]))
+      }
       cat("MeansDF:\n")
       print(meansdf)
       str(meansdf)
