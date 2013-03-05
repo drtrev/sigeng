@@ -31,6 +31,7 @@ library(reshape)
 remove.factor <- function(x, convert="character") {
   command <- paste("y <- as.", convert, "(levels(x)[x])", sep="")
   eval(parse(text=command))
+  y
 }
 
 remove.levels <- function(DF, var, remove)

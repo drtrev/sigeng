@@ -1825,7 +1825,7 @@ psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar
   # Write auto.write==T, we will automatically write the summary to outfile, but first we check it exists and ask whether to overwrite it.
 {
   ## We want x, y, n for each participant
-  ## intensity, number of positive response, number of trials
+  ## intensity, number of positive response (for a yes/no task) or no. correct responses (nAFC), number of trials
   
   # cover possibilities of a numeric or factor id
   if (is.factor(DF[,idvar])) ids <- levels(DF[,idvar])
@@ -2020,7 +2020,8 @@ psignifit.threshold <- function(f=0.5, alpha, beta)
   return (alpha - beta * log(1/f-1))
 }
 
-psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, xlabel="Intensity", xticbreaks="auto", xticlabs="auto", titleprefix=NULL, title=NULL, threshold=T, nothreshleft=F, nothreshdown=F)
+psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, nafc=1, xmin=NULL,
+                           xlabel="Intensity", xticbreaks="auto", xticlabs="auto", titleprefix=NULL, title=NULL, threshold=T, nothreshleft=F, nothreshdown=F)
   # Parameters:
   # DFthresh from psignifit.readthreshslope
   # DFpsi from DFsum$psignifit from DFsum <- psignifit.summariseFor
@@ -2046,7 +2047,9 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
       DFpsiidcond <- DFpsi[DFpsi[,idvar]==i & DFpsi[,condvar]==cond,]
 
       temp.x <- remove.factor(DFpsiidcond$x, convert="numeric")
-      my.model <- data.frame(x=min(temp.x):max(temp.x))
+      temp.xmin <- min(temp.x)
+      if (!is.null(xmin)) temp.xmin <- xmin # allow user to override, e.g. set to 0
+      my.model <- data.frame(x=temp.xmin:max(temp.x))
       my.model$y <- psignifit.predict(my.model$x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
 
      
@@ -2080,9 +2083,11 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
         threshold.y <- psignifit.predict(threshold.x, DFthreshidcond$alpha, DFthreshidcond$beta, DFthreshidcond$gamma, DFthreshidcond$lambda)
         print(threshold.y)
         # (min(xs), ty) to end (tx, ty)
-        # (tx, ty) to end (tx, 0)
+        # (tx, ty) to end (tx, lowbound)
+        lowbound <- 0
+        if (nafc > 1) lowbound <- 1 / nafc
         minxs <- min(remove.factor(DFpsi$x, "numeric"))
-        DFthresh.temp <- data.frame(x=c(minxs, threshold.x), xend=rep(threshold.x, 2), y=rep(threshold.y, 2), yend=c(threshold.y, 0), cond=cond)
+        DFthresh.temp <- data.frame(x=c(minxs, threshold.x), xend=rep(threshold.x, 2), y=rep(threshold.y, 2), yend=c(threshold.y, lowbound), cond=cond)
         if (nothreshleft) DFthresh.temp <- DFthresh.temp[2,]
         if (nothreshdown) DFthresh.temp <- DFthresh.temp[1,]
 
