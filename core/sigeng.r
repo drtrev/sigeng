@@ -384,6 +384,9 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
 
   }else if (plothash[["type"]] == "crossbar") {
 
+    # hack levels for body illusion
+    #summaryDF$body.sync <- factor(summaryDF$body.sync, levels=c("Body.Synchronous", "Body.Asynchronous", "Object.Synchronous", "Object.Asynchronous"))
+
     median <- "Median"
     X1stQu <- "X1st.Qu."
     X3rdQu <- "X3rd.Qu."
