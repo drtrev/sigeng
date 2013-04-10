@@ -724,7 +724,8 @@ plotWithinMult <- function(dv, params, plotPsycho)
 
   cat("Correcting stderr using old Loftus and Masson method by concatenating all withinIVs\n")
   if (length(betweenIVs) > 0) cat("TODO not sure what this correction is doing with between IVs\n")
-  meansdf <- calcadj(DF, variable="conc", value=dv)
+  if (length(IDs) > 1) stop("sigeng/plotWithinMult: not sure how to deal with > 1 ID yet")
+  meansdf <- calcadj(DF, id=IDs, variable="conc", value=dv)
 
   summarydf <- calcSummaryDF(DF, variable="conc", value=dv)
   # split out our conc variables into separate ones for plotting
@@ -891,7 +892,7 @@ getConc <- function(DF, withinIVs)
 
 diagnosticplot <- function(dv, resids)
 {
-  p <- qplot( resids ) + opts(title=paste(dv, "residuals"))
+  p <- qplot( resids ) + ggtitle(paste(dv, "residuals"))
   print(p)
 }
 
