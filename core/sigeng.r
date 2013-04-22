@@ -2025,7 +2025,7 @@ psignifit.threshold <- function(f=0.5, alpha, beta)
 }
 
 psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, nafc=1, xmin=NULL,
-                           xlabel="Intensity", xticbreaks="auto", xticlabs="auto", titleprefix=NULL, title=NULL, threshold=T, nothreshleft=F, nothreshdown=F)
+                           xlabel="Intensity", xticbreaks="auto", xticlabs="auto", colourlabel=NULL, titleprefix=NULL, title="default", threshold=T, nothreshleft=F, nothreshdown=F)
   # Parameters:
   # DFthresh from psignifit.readthreshslope
   # DFpsi from DFsum$psignifit from DFsum <- psignifit.summariseFor
@@ -2039,6 +2039,8 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
 
   if (is.null(ids))   { if (is.factor(DFthresh[,idvar]))   ids   <- levels(DFthresh[,idvar])   else ids   <- DFthresh[,idvar] }
   if (is.null(conds)) { if (is.factor(DFthresh[,condvar])) conds <- levels(DFthresh[,condvar]) else conds <- DFthresh[,condvar] }
+
+  if (is.null(colourlabel)) colourlabel <- condvar
 
   for (i in ids) {
 
@@ -2100,10 +2102,14 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
 
     }
     if (is.null(title)) {
-      if (is.null(titleprefix)) title.current <- paste("Participant", i, sep=" ")
-      else title.current <- paste(titleprefix, "Participant", i, sep=" ")
-    }else title.current <- title
-    p <- p + ggtitle(title.current) + labs(x=xlabel, fill=condvar)
+      p <- p + labs(x=xlabel, colour=colourlabel)
+    }else{
+      if (title == "default") {
+        if (is.null(titleprefix)) title.current <- paste("Participant", i, sep=" ")
+        else title.current <- paste(titleprefix, "Participant", i, sep=" ")
+      }else title.current <- title
+      p <- p + ggtitle(title.current) + labs(x=xlabel, colour=colourlabel)
+    }
     print(p)
   }
 
