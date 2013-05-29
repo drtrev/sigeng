@@ -1822,6 +1822,43 @@ file.overwrite.prompt <- function(filename=stop("file.overwrite.prompt: no filen
   return(overwrite)
 }
 
+remake.check <- function(fun.call, cache.file)
+  # e.g. remake <- remake.check(match.call(), "cache/analyse-fun.call.Rdata")
+  # General workflow:
+  # Raw data (e.g. *.xml, potentially appended to in case of a crash)
+  # -> Files ready to be read and processed (e.g. *-r.xml with only the last <?xml> cut out. Remove these files to remake them.)
+  # -> "Intermediary files": Relevant data extracted from *-r.xml and converted into R data frame, with some initial calculations
+  # (e.g. thresholds); saved to a cache.
+  # The intermediary files only need to be remade (remake=T) if the arguments change (e.g. number of reversals
+  # to ignore for calculating the threshold) or if the raw data change.
+  # The actual arguments are cached separately from the intermediary files (e.g. cache/analyse-fun.call.Rdata).
+  # Here, we check if the actual arguments from the function call changed by comparing this call to the one in the cache.
+  # We could also check if raw data changes, e.g. by having an md5sum or sha1 for each subject, or just let the user specify
+  # remake=T in the analyse() function when they update the raw data. This is probably quicker and easier than checking all the md5sums
+  # each time we run the analysis.
+{
+  remake <- F
+
+  # First, check if the cache even exists.
+  # If it doesn't, then we can presume this is a first run and we need to make ('remake') our intermediary files.
+  if (file.exists(cache.file)) {
+    # Load cached arguments into a new environment, so as not to mask anything.
+    newenv <- new.env()
+    load(cache.file, newenv)
+
+    # Check if loaded call matches current call
+    if (!identical(newenv$fun.call, fun.call)) {
+      cat("Detected function call change, will remake.\n")
+      remake <- T
+    }
+  }else{
+    cat("No cache of function call, will remake.\n")
+    remake <- T
+  }
+  
+  remake
+}
+
 psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar="y", condvar=NULL, outfile="summary.txt", outfile.overall="summary-overall.txt", auto.write=T)
   # Usage e.g.:
   # mysum <- psignifit.summariseFor(...)
