@@ -1836,6 +1836,7 @@ remake.check <- function(fun.call, cache.file)
   # We could also check if raw data changes, e.g. by having an md5sum or sha1 for each subject, or just let the user specify
   # remake=T in the analyse() function when they update the raw data. This is probably quicker and easier than checking all the md5sums
   # each time we run the analysis.
+  # Known bug: If the function call is changed to remake=F then it will be remade the first time, but at least this keeps things simple.
 {
   remake <- F
 
@@ -1846,8 +1847,15 @@ remake.check <- function(fun.call, cache.file)
     newenv <- new.env()
     load(cache.file, newenv)
 
+    mismatch <- F
+    fun.call.list <- as.list(fun.call)
+    cached.call.list <- as.list(newenv$fun.call)
+    for (i in names(fun.call.list)) {
+      if (i != "remake" && !identical(fun.call.list[[i]], cached.call.list[[i]])) { mismatch <- T; break }
+    }
     # Check if loaded call matches current call
-    if (!identical(newenv$fun.call, fun.call)) {
+    #if (!identical(newenv$fun.call, fun.call)) {
+    if (mismatch) {
       cat("Detected function call change, will remake.\n")
       remake <- T
     }
