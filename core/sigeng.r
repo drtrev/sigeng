@@ -1823,7 +1823,7 @@ file.overwrite.prompt <- function(filename=stop("file.overwrite.prompt: no filen
 }
 
 remake.check <- function(fun.call, cache.file)
-  # e.g. remake <- remake.check(match.call(), "cache/analyse-fun.call.Rdata")
+  # e.g. if (!remake) remake <- remake.check(match.call(), "cache/analyse-fun.call.Rdata")
   # General workflow:
   # Raw data (e.g. *.xml, potentially appended to in case of a crash)
   # -> Files ready to be read and processed (e.g. *-r.xml with only the last <?xml> cut out. Remove these files to remake them.)
@@ -1836,7 +1836,6 @@ remake.check <- function(fun.call, cache.file)
   # We could also check if raw data changes, e.g. by having an md5sum or sha1 for each subject, or just let the user specify
   # remake=T in the analyse() function when they update the raw data. This is probably quicker and easier than checking all the md5sums
   # each time we run the analysis.
-  # Known bug: If the function call is changed to remake=F then it will be remade the first time, but at least this keeps things simple.
 {
   remake <- F
 
@@ -1847,18 +1846,30 @@ remake.check <- function(fun.call, cache.file)
     newenv <- new.env()
     load(cache.file, newenv)
 
+    # Check if loaded call matches current call.
+    # Actually cannot just check calls like this:
+    # !identical(newenv$fun.call, fun.call)
+    # because then if the user adds remake=F it would actually remake (one time only).
+
+
+    # So we check the actual args individually
     mismatch <- F
     fun.call.list <- as.list(fun.call)
     cached.call.list <- as.list(newenv$fun.call)
-    for (i in names(fun.call.list)) {
+
+    # Go through the longer one and check they match (if length is different and the new arg is just remake this is fine)
+    if (length(fun.call.list) > length(cached.call.list)) longest.names <- names(fun.call.list)
+    else longest.names <- names(cached.call.list)
+
+    for (i in longest.names) {
       if (i != "remake" && !identical(fun.call.list[[i]], cached.call.list[[i]])) { mismatch <- T; break }
     }
-    # Check if loaded call matches current call
-    #if (!identical(newenv$fun.call, fun.call)) {
+
     if (mismatch) {
       cat("Detected function call change, will remake.\n")
       remake <- T
     }
+
   }else{
     cat("No cache of function call, will remake.\n")
     remake <- T
