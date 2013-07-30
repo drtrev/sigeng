@@ -1891,7 +1891,7 @@ outliers.getidx <- function(dv, method, method.param=NULL)
   idx <- NULL
   if (method=="classic")
   {
-    print("Using classic method for detecting outliers")
+    cat("Using classic method for detecting outliers.\n")
     if (is.null(method.param)) stop("sigeng: outliers.sub() method.param not defined")
     if (!is.numeric(method.param)) stop("sigeng: outliers.sub() method.param is not numeric")
     cat("Outlier values:\n")
@@ -1902,9 +1902,16 @@ outliers.getidx <- function(dv, method, method.param=NULL)
     idx <-        which(dv > mean(dv) + sd(dv) * method.param)
     idx <- c(idx, which(dv < mean(dv) - sd(dv) * method.param))
   }
-  if (method=="boxplot") stop("sigeng: outliers.getidx() method boxplot not yet implemented.")
+  if (method=="boxplot")
+  {
+    idx <- which(dv %in% boxplot(dv)$out)
+  }
+  if (method=="out")
+  {
+    # TODO note could do this in matrix form, col1 is var1 and col2 is var2 (then it plots it for you!)
+    idx <- out(dv)$out.id
+  }
   if (method=="ggboxplot") stop("sigeng: outliers.getidx() method ggboxplot not yet implemented.")
-  if (method=="out") stop("sigeng: outliers.getidx() method out not yet implemented.")
   if (is.null(idx)) stop(paste("sigeng: outliers.getidx() method not found:", method))
 
   cat("Outlier indexes:\n")
@@ -1913,7 +1920,7 @@ outliers.getidx <- function(dv, method, method.param=NULL)
   return(idx)
 }
 
-outliers.respond <- function(params, method, method.param, response)
+outliers.respond <- function(params, method, method.param, response, response.param)
 # See outliers() for details
 {
   if (length(params$DVs) > 1) stop("sigeng: outliers.respond() only deals with 1 DV for now")
@@ -1936,29 +1943,29 @@ outliers.respond <- function(params, method, method.param, response)
       # lookup other blocks for same ID and IVs
       # So first get current block, ID, and IVs
       currentBlock <- DF[i,params$blocks]
-      cat("currentBlock:\n")
-      print(currentBlock)
+      #cat("currentBlock:\n")
+      #print(currentBlock)
       currentId <- DF[i,params$IDs]
-      cat("CurrentId:\n")
-      print(currentId)
-      cat("params$withinIVs:\n")
-      print(params$withinIVs)
+      #cat("CurrentId:\n")
+      #print(currentId)
+      #cat("params$withinIVs:\n")
+      #print(params$withinIVs)
       currentWithinIVs <- DF[i,params$withinIVs, drop=F] # don't drop, so if there's only one column it will stay as a DF
-      cat("CurrentWithinIVs:\n")
-      print(currentWithinIVs)
-      print(class(currentWithinIVs))
+      #cat("CurrentWithinIVs:\n")
+      #print(currentWithinIVs)
+      #print(class(currentWithinIVs))
       currentBetweenIVs <- DF[i,params$betweenIVs, drop=F]
       lookupBlocks <- levels(DF[,params$blocks])[levels(DF[,params$blocks])!=currentBlock]
-      cat("lookupBlocks:\n")
-      print(lookupBlocks)
+      #cat("lookupBlocks:\n")
+      #print(lookupBlocks)
 
       # Now look them all up
       # Make a DF of currentWithinIVs for comparison
       currentWithinIVsDF  <- ldply(1:nrow(DF), function(x) currentWithinIVs)
       currentBetweenIVsDF <- ldply(1:nrow(DF), function(x) currentBetweenIVs)
       # Set matching cells to True
-      print(class(currentWithinIVsDF))
-      print(class(DF[,params$withinIVs, drop=F]))
+      #print(class(currentWithinIVsDF))
+      #print(class(DF[,params$withinIVs, drop=F]))
 
       if (length(params$withinIVs) > 0) {
         #print(currentWithinIVsDF)
@@ -1977,13 +1984,14 @@ outliers.respond <- function(params, method, method.param, response)
       # When both within and between rows match:
       rows <- rowsWithin & rowsBetween
       values <- DF[DF[,params$IDs] == currentId & DF[,params$blocks] %in% lookupBlocks & rows,]
-      cat("Replacement values found:\n")
-      print(values)
-      cat("Those were the values.\n")
+      #cat("Replacement values found:\n")
+      #print(values)
+      #cat("Those were the values.\n")
       replace.value <- mean(values[,params$DVs[1]]) # response=="meanotherblocks"
-      if (response=="meanblocks") response.value <- mean(c(values[,params$DVs[1]], DF[i,params$DVs[1]]))
+      if (response=="meanblocks") replace.value <- mean(c(values[,params$DVs[1]], DF[i,params$DVs[1]]))
 
       #DF[DF[,params$IDs] == currentId & DF[,params$blocks] == currentBlock & rows,params$DVs[1]] <- replace.value
+      cat(paste("Original value:", DF[i, params$DVs[1]], "replaced with:", replace.value, "\n"))
       DF[i, params$DVs[1]] <- replace.value
     }
   }
@@ -1994,11 +2002,35 @@ outliers.respond <- function(params, method, method.param, response)
     responded <- T
   }
 
+  if (response=="convert")
+  {
+    # Check we've got a response.param
+    if (is.null(response.param) || !is.numeric(response.param))
+      stop("sigeng: outliers.respond() response is convert but missing response param")
+
+    responded <- T
+
+    # Get mean and sd
+    m <- mean(DF[,params$DVs[1]])
+    s <- sd(DF[,params$DVs[1]])
+    for (i in idx)
+    {
+      cat(paste("Original value:", DF[i, params$DVs[1]]))
+      # first is it a high or low outlier?
+      if (DF[i, params$DVs[1]] < m)
+        DF[i, params$DVs[1]] <- m - response.param * s
+      else
+        DF[i, params$DVs[1]] <- m + response.param * s
+
+      cat(paste(" replaced with:", DF[i, params$DVs[1]], "\n"))
+    }
+  }
+
   if (!responded) stop(paste("sigeng: outliers.respond() response not found:", response))
   return(DF)
 }
 
-outliers <- function(params, method="classic", method.param=2, split.blocks=F, response="meanotherblocks")
+outliers <- function(params, method="classic", method.param=2, split.blocks=F, response="meanotherblocks", response.param=NULL)
 # requires DF, DVs, blocks, IDs, withinIVs, betweenIVs
 # method is either "classic", "boxplot", or TODO "ggboxplot", "out" from WRS
 # method.param is currently just for classic, and corresponds to the number of SDs to consider it an outlier
@@ -2009,6 +2041,9 @@ outliers <- function(params, method="classic", method.param=2, split.blocks=F, r
 #                    "removeblock" (remove that row)
 #                    "removeparticipant" (remove whole participant i.e. maybe > 1 row)
 #                    "NA" (set to NA)
+#                    (from Field, 5.7.1, p. 153):
+#                    "convert" with response.param number of SDs (= Z score) e.g. convert to mean + 2SDs
+#                  
 {
   # Error check (useful if calling from outside sigeng() )
   if (is.null(params$DF) || is.null(params$DVs) || is.null(params$IDs))
@@ -2017,7 +2052,7 @@ outliers <- function(params, method="classic", method.param=2, split.blocks=F, r
   # this is done in outliers.respond: if (length(params$DVs) > 1) stop("sigeng: outliers() only deals with 1 DV for now")
   if (!split.blocks)
   {
-    params$DF <- outliers.respond(params, method, method.param, response)
+    params$DF <- outliers.respond(params, method, method.param, response, response.param)
   }
 
   return(params$DF)
