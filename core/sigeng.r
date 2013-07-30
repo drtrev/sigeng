@@ -9,6 +9,12 @@ library(ggplot2)
 library(WRS)
 #library(hash)
 
+remove.factor <- function(x, convert="character") {
+  command <- paste("y <- as.", convert, "(levels(x)[x])", sep="")
+  eval(parse(text=command))
+  y
+}
+
 checkForBetweenInteraction <- function(mysum, IDs, DVs, withinIVs, betweenIVs)
 {
   # WORK IN PROGRESS
