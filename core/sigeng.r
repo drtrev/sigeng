@@ -1761,6 +1761,7 @@ sigeng <- function(DF, analysisID="default", IDs="id", DVs=c("value"), withinIVs
 
   # TODO outlier check for removing participants based on other vars
   # This should have a global outlier check here based on all DVs, e.g. using out() from WRS
+  # Note: can use a function for this, currently working on outliers()
 
   # TODO MANOVA
 
@@ -1882,6 +1883,144 @@ remake.check <- function(fun.call, cache.file)
   }
   
   remake
+}
+
+outliers.getidx <- function(dv, method, method.param=NULL)
+# Simply gets the indexes of outliers. See outliers() for details of method and method.param
+{
+  idx <- NULL
+  if (method=="classic")
+  {
+    print("Using classic method for detecting outliers")
+    if (is.null(method.param)) stop("sigeng: outliers.sub() method.param not defined")
+    if (!is.numeric(method.param)) stop("sigeng: outliers.sub() method.param is not numeric")
+    cat("Outlier values:\n")
+    print(dv[ dv > mean(dv) + sd(dv) * method.param ])
+    print(dv[ dv < mean(dv) - sd(dv) * method.param ])
+
+    # Get idx's of outliers
+    idx <-        which(dv > mean(dv) + sd(dv) * method.param)
+    idx <- c(idx, which(dv < mean(dv) - sd(dv) * method.param))
+  }
+  if (method=="boxplot") stop("sigeng: outliers.getidx() method boxplot not yet implemented.")
+  if (method=="ggboxplot") stop("sigeng: outliers.getidx() method ggboxplot not yet implemented.")
+  if (method=="out") stop("sigeng: outliers.getidx() method out not yet implemented.")
+  if (is.null(idx)) stop(paste("sigeng: outliers.getidx() method not found:", method))
+
+  cat("Outlier indexes:\n")
+  print(idx)
+
+  return(idx)
+}
+
+outliers.respond <- function(params, method, method.param, response)
+# See outliers() for details
+{
+  if (length(params$DVs) > 1) stop("sigeng: outliers.respond() only deals with 1 DV for now")
+
+  DF <- params$DF # easier
+
+  idx <- outliers.getidx(DF[,params$DVs[1]], method, method.param)
+
+  responded <- F
+
+  if (response=="meanotherblocks" || response=="meanblocks")
+  {
+    if (is.null(params$blocks)) stop("sigeng: outliers.respond() no blocks defined")
+
+    responded <- T
+
+    # Go through idx
+    for (i in idx)
+    {
+      # lookup other blocks for same ID and IVs
+      # So first get current block, ID, and IVs
+      currentBlock <- DF[i,params$blocks]
+      cat("currentBlock:\n")
+      print(currentBlock)
+      currentId <- DF[i,params$IDs]
+      cat("CurrentId:\n")
+      print(currentId)
+      cat("params$withinIVs:\n")
+      print(params$withinIVs)
+      currentWithinIVs <- DF[i,params$withinIVs, drop=F] # don't drop, so if there's only one column it will stay as a DF
+      cat("CurrentWithinIVs:\n")
+      print(currentWithinIVs)
+      print(class(currentWithinIVs))
+      currentBetweenIVs <- DF[i,params$betweenIVs, drop=F]
+      lookupBlocks <- levels(DF[,params$blocks])[levels(DF[,params$blocks])!=currentBlock]
+      cat("lookupBlocks:\n")
+      print(lookupBlocks)
+
+      # Now look them all up
+      # Make a DF of currentWithinIVs for comparison
+      currentWithinIVsDF  <- ldply(1:nrow(DF), function(x) currentWithinIVs)
+      currentBetweenIVsDF <- ldply(1:nrow(DF), function(x) currentBetweenIVs)
+      # Set matching cells to True
+      print(class(currentWithinIVsDF))
+      print(class(DF[,params$withinIVs, drop=F]))
+
+      if (length(params$withinIVs) > 0) {
+        #print(currentWithinIVsDF)
+        logicalWithinIVMatch <- DF[,params$withinIVs, drop=F] == currentWithinIVsDF
+        #print(logicalWithinIVMatch)
+        rowsWithin <- aaply(logicalWithinIVMatch, 1, all)
+        #print(rowsWithin)
+      } else rowsWithin <- rep(T, nrow(DF))
+
+      if (length(params$betweenIVs) > 0) {
+        logicalBetweenIVMatch <- DF[,params$betweenIVs, drop=F] == currentBetweenIVsDF
+        # When whole row matches set it to True
+        rowsBetween <- aaply(logicalBetweenIVMatch, 1, all)
+      } else rowsBetween <- rep(T, nrow(DF))
+
+      # When both within and between rows match:
+      rows <- rowsWithin & rowsBetween
+      values <- DF[DF[,params$IDs] == currentId & DF[,params$blocks] %in% lookupBlocks & rows,]
+      cat("Replacement values found:\n")
+      print(values)
+      cat("Those were the values.\n")
+      replace.value <- mean(values[,params$DVs[1]]) # response=="meanotherblocks"
+      if (response=="meanblocks") response.value <- mean(c(values[,params$DVs[1]], DF[i,params$DVs[1]]))
+
+      #DF[DF[,params$IDs] == currentId & DF[,params$blocks] == currentBlock & rows,params$DVs[1]] <- replace.value
+      DF[i, params$DVs[1]] <- replace.value
+    }
+  }
+
+  if (response=="NA")
+  {
+    DF[idx,params$DVs[1]] <- NA
+    responded <- T
+  }
+
+  if (!responded) stop(paste("sigeng: outliers.respond() response not found:", response))
+  return(DF)
+}
+
+outliers <- function(params, method="classic", method.param=2, split.blocks=F, response="meanotherblocks")
+# requires DF, DVs, blocks, IDs, withinIVs, betweenIVs
+# method is either "classic", "boxplot", or TODO "ggboxplot", "out" from WRS
+# method.param is currently just for classic, and corresponds to the number of SDs to consider it an outlier
+# split.blocks: either check for outliers with all blocks together (pretend they are all independent observations)
+#             or set split.blocks=T and check for each block separately
+# response is either "meanotherblocks" (use the mean score from all other blocks)
+#                    "meanblocks" (use the mean score of all blocks including the outlier)
+#                    "removeblock" (remove that row)
+#                    "removeparticipant" (remove whole participant i.e. maybe > 1 row)
+#                    "NA" (set to NA)
+{
+  # Error check (useful if calling from outside sigeng() )
+  if (is.null(params$DF) || is.null(params$DVs) || is.null(params$IDs))
+    stop("sigeng: outliers() missing DF, DVs or IDs")
+
+  # this is done in outliers.respond: if (length(params$DVs) > 1) stop("sigeng: outliers() only deals with 1 DV for now")
+  if (!split.blocks)
+  {
+    params$DF <- outliers.respond(params, method, method.param, response)
+  }
+
+  return(params$DF)
 }
 
 psignifit.summariseFor <- function(DF, idvar="id", intensityvar="x", responsevar="y", condvar=NULL, outfile="summary.txt", outfile.overall="summary-overall.txt", auto.write=T)
