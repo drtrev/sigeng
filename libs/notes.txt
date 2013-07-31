@@ -1,0 +1,3 @@
+The R code is copied to BaguleyWSCI.txt and has been modified there (use diff).
+
+Basically just fixing it up for use.

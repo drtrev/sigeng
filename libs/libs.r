@@ -28,11 +28,39 @@ library(foreign) # for read.spss
 library(foreach)
 library(reshape)
 
-remove.factor <- function(x, convert="character") {
-  command <- paste("y <- as.", convert, "(levels(x)[x])", sep="")
+# This could be promoted to sigeng if it works:
+
+withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95)
+# For std.error can use conf.level=pnorm(1)-pnorm(-1) i.e. coverage level of std.error
+# (pnorm(1.96)-pnorm(-1.96) is .95 conf level)
+{
+  # Get levels of withinIV as separate columns
+  command <- paste0("DFwide <- dcast(DF, ", ID, " ~ ", withinIV, ", value.var=\"", value, "\")")
+  #cat(command, "\n")
   eval(parse(text=command))
-  y
+
+  DFwide[,ID] <- NULL
+  #print(DFwide)
+
+  DFout <- data.frame(fun(DFwide, conf.level=conf.level))
+  DFout$ci <- (DFout$upper - DFout$lower) / 2
+  #print(DFout)
+  
+  # Get a load of other descriptives too
+  command <- paste0("desc <- ddply(DF, withinIV, summarise, mean=mean(", value, "), sd=sd(", value, "), bs.std.error=std.error(", value, "), bs.confint=qnorm(.975)*std.error(", value, "))")
+  #cat(command, "\n")
+  eval(parse(text=command))
+
+  DFout <- cbind(DFout, desc)
+
 }
+
+# Promoted to sigeng:
+#remove.factor <- function(x, convert="character") {
+#  command <- paste("y <- as.", convert, "(levels(x)[x])", sep="")
+#  eval(parse(text=command))
+#  y
+#}
 
 remove.levels <- function(DF, var, remove)
 # e.g. DF <- remove.level(DF, "id", c(1, 2, 3)) to remove participants 1, 2 and 3

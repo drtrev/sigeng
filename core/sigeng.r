@@ -902,7 +902,7 @@ diagnosticplot <- function(dv, resids)
   print(p)
 }
 
-calcadj.biv <- function(DF, dv, betweenIVs)
+calcadj.biv <- function(DF, IDs, dv, betweenIVs)
 # Adjustment for within subject error is done for each group of subjects (e.g. each level of the between subject variable)
 {
   if (length(betweenIVs)==1) {
@@ -919,7 +919,7 @@ calcadj.biv <- function(DF, dv, betweenIVs)
       #print(DFsub)
 
       # correct within error bars for subset only
-      temp <- calcadj(DFsub, variable="conc", value=dv)
+      temp <- calcadj(DFsub, id=IDs, variable="conc", value=dv)
       temp[,biv] <- unique(DFsub[,biv])
 
       meansdf <- rbind(meansdf, temp)
@@ -950,7 +950,7 @@ calcadj.biv <- function(DF, dv, betweenIVs)
       DFsub$biv <- NULL
       #print(DFsub)
       #print(betweenIVs.temp)
-      meansdf.temp <- calcadj.biv(DFsub, dv, betweenIVs.temp)
+      meansdf.temp <- calcadj.biv(DFsub, IDs, dv, betweenIVs.temp)
       meansdf.temp <- cbind(meansdf.temp, i)
       colnames(meansdf.temp)[length(colnames(meansdf.temp))] <- biv
       meansdf <- rbind(meansdf, meansdf.temp)
@@ -1023,7 +1023,7 @@ doplot <- function(dv, params)
       DF$conc <- getConc(DF, withinIVs)
 
       print(betweenIVs)
-      meansdf <- calcadj.biv(DF, dv, betweenIVs)
+      meansdf <- calcadj.biv(DF, params$IDs, dv, betweenIVs)
       cat("MeansDF:\n")
       print(meansdf)
       if (length(withinIVs) > 1) # we have conc
@@ -1920,6 +1920,13 @@ outliers.getidx <- function(dv, method, method.param=NULL)
   return(idx)
 }
 
+find.row <- function(DF, row)
+# TODO allow partial matches i.e. some columns not listed in row
+{
+  for (i in 1:nrow(df)) if (all(df[i,] == row)) return(i)
+  return(NULL)
+}
+
 outliers.respond <- function(params, method, method.param, response, response.param)
 # See outliers() for details
 {
@@ -1940,6 +1947,9 @@ outliers.respond <- function(params, method, method.param, response, response.pa
     # Go through idx
     for (i in idx)
     {
+      # TODO can I just use find.row (above function)?
+      cat("Outlier row:\n")
+      print(DF[i,])
       # lookup other blocks for same ID and IVs
       # So first get current block, ID, and IVs
       currentBlock <- DF[i,params$blocks]
