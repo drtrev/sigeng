@@ -40,7 +40,8 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
   eval(parse(text=command))
 
   DFwide[,ID] <- NULL
-  #print(DFwide)
+  cat("DFwide - check all good here, should have one column for each within level:\n")
+  print(DFwide)
 
   DFout <- data.frame(fun(DFwide, conf.level=conf.level))
   DFout$ci <- (DFout$upper - DFout$lower) / 2
@@ -53,6 +54,53 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
 
   DFout <- cbind(DFout, desc)
 
+}
+
+mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.level=.95)
+  # This actually works out the same as just splitting data into groups and running cm.ci for each group separately
+{
+  # testing
+  #DF <- words.cut
+  #ID <- "sid"
+  #betweenIV <- "VRRW"
+  #withinIV <- "Condition"
+  #value <- "words"
+  #group.var<-"first"
+  #fun <- cm.ci.mixed
+  # end testing
+  # Get levels of withinIV as separate columns
+  command <- paste0("DFwide <- dcast(DF, ", ID, " + ", betweenIV, " ~ ", withinIV, ", value.var=\"", value, "\")")
+  cat(command, "\n")
+  eval(parse(text=command))
+
+  DFwide[,ID] <- NULL
+  cat("DFwide - check all good here, should have first column as group, then one column for each within level:\n")
+  print(DFwide)
+
+  # It only makes sense to use the fun's from Baguley (because the mixed ones there all take a group var)
+  DFout <- fun(DFwide, group.var="first", conf.level=conf.level)
+  DFout <- llply(DFout, transform, ci=(upper - lower) / 2)
+  print(DFout)
+  
+  # The groups are labelled in cm.ci.mixed using:
+  # unclass(DFwide[[1]])[1:nrow(DFwide)]
+  # i.e. the level numbers. So we can label them back as something meaningful using:
+  for (i in 1:length(DFout)) DFout[[i]]$group <- levels(DFwide[[1]])[i]
+  #for (i in 1:length(DFout)) DFout[[i]]$group <- i
+  #DFout$group <- levels(DFwide[[1]])[DFout$group]
+  #DFout <- llply(DFout, transform, group=levels(DFwide[[1]])[group])
+  DFout <- do.call(rbind, DFout)
+  DFout$group <- factor(DFout$group)
+  
+  #row.names(DFout[[1]])
+  #ddply(DF, c(betweenIV, withinIV), summarise, mean=mean(words))
+  
+  # Get a load of other descriptives too
+  command <- paste0("desc <- ddply(DF, c(betweenIV, withinIV), summarise, mean=mean(", value, "), sd=sd(", value, "), bs.std.error=std.error(", value, "), bs.confint=qnorm(.975)*std.error(", value, "))")
+  cat(command, "\n")
+  eval(parse(text=command))
+  
+  DFout <- cbind(DFout, desc)
 }
 
 # Promoted to sigeng:

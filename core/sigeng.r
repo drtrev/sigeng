@@ -1894,9 +1894,14 @@ outliers.getidx <- function(dv, method, method.param=NULL)
     cat("Using classic method for detecting outliers.\n")
     if (is.null(method.param)) stop("sigeng: outliers.sub() method.param not defined")
     if (!is.numeric(method.param)) stop("sigeng: outliers.sub() method.param is not numeric")
-    cat("Outlier values:\n")
-    print(dv[ dv > mean(dv) + sd(dv) * method.param ])
-    print(dv[ dv < mean(dv) - sd(dv) * method.param ])
+    out1 <- dv[ dv > mean(dv) + sd(dv) * method.param ]
+    out2 <- dv[ dv < mean(dv) - sd(dv) * method.param ]
+    if (length(out1) > 0 || length(out2) > 0)
+    {
+      cat("Outlier values:\n")
+      print(out1)
+      print(out2)
+    }
 
     # Get idx's of outliers
     idx <-        which(dv > mean(dv) + sd(dv) * method.param)
@@ -1914,8 +1919,11 @@ outliers.getidx <- function(dv, method, method.param=NULL)
   if (method=="ggboxplot") stop("sigeng: outliers.getidx() method ggboxplot not yet implemented.")
   if (is.null(idx)) stop(paste("sigeng: outliers.getidx() method not found:", method))
 
-  cat("Outlier indexes:\n")
-  print(idx)
+  if (length(idx) > 0)
+  {
+    cat("Outlier indexes:\n")
+    print(idx)
+  }
 
   return(idx)
 }
@@ -2025,6 +2033,8 @@ outliers.respond <- function(params, method, method.param, response, response.pa
     s <- sd(DF[,params$DVs[1]])
     for (i in idx)
     {
+      cat("Outlier row:\n")
+      print(DF[i,])
       cat(paste("Original value:", DF[i, params$DVs[1]]))
       # first is it a high or low outlier?
       if (DF[i, params$DVs[1]] < m)

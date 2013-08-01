@@ -193,13 +193,13 @@ cm.ci.mixed <- function(data.frame, group.var = "last", conf.level = 0.95,
         if (group.var == "last") 
             data <- subset(data.frame, data.frame[k] == i)[within]
         else data <- subset(data.frame, data.frame[1] == i)[within]
-        p.means <- mean(as.data.frame(t(data)))
+        p.means <- colMeans(as.data.frame(t(data)))
         norm.dat <- data - p.means + (mean(p.means))
         t.mat <- matrix(, k - 1, 1)
         mean.mat <- matrix(, k - 1, 1)
         ci.mat <- matrix(, k - 1, 2)
         for (j in 1:(k - 1)) t.mat[j, ] <- t.test(norm.dat[j])$statistic[1]
-        for (j in 1:(k - 1)) mean.mat[j, ] <- mean(norm.dat[j])
+        for (j in 1:(k - 1)) mean.mat[j, ] <- mean(norm.dat[,j])
         n <- nrow(data)
         moe.mat <- mean.mat/t.mat * qt(1 - (1 - conf.level)/2, n - 1) * c.factor * 
             diff.factor
