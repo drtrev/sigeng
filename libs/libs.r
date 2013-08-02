@@ -158,15 +158,18 @@ mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.
   #bs$bs.confint.t.95 <- (bs$bs.upper.t.95 - bs$bs.lower.t.95) / 2
   
   # Separate based on between subject var first:
-  bs <- ddply(DFwide, names(DFwide)[1], function(x) { x[,1] <- NULL; y <- data.frame(bs.ci(x)); y$Condition <- factor(colnames(x)); y } )
-  bs <- bs[order(bs$VRRW, bs$Condition),]
+  bs <- ddply(DFwide, names(DFwide)[1], function(x, withinIV) { x[,1] <- NULL; y <- data.frame(bs.ci(x)); y[,withinIV] <- factor(colnames(x)); y }, withinIV )
+  bs <- bs[order(bs[,betweenIV], bs[,withinIV]),]
   bs$bs.confint.t.95 <- (bs$upper - bs$lower) / 2
   bs$bs.midpoint <- bs$lower + bs$bs.confint.t.95
   colnames(bs)[2:3] <- c("bs.lower.t.95", "bs.upper.t.95")
-  
+
+  # Refactor so it's in alpha order
+  DFout[,withinIV] <- remove.factor(DFout[,withinIV])
+  DFout[,withinIV] <- factor(DFout[,withinIV])
   cat("Check row names match conditions, they are going to be cbind'd:\n")
   print(bs)
-  DFout <- DFout[order(DFout$VRRW, DFout$Condition),]
+  DFout <- DFout[order(DFout[,betweenIV], DFout[,withinIV]),]
   print(DFout)
   bs[,1] <- NULL # don't need condition name
   
