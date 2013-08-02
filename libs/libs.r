@@ -34,6 +34,20 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
 # For std.error can use conf.level=pnorm(1)-pnorm(-1) i.e. coverage level of std.error
 # (pnorm(1.96)-pnorm(-1.96) is .95 conf level)
 {
+  # Safety when testing
+  test <- F
+  if (test)
+  {
+  #Test
+    DF <- data$DF
+    ID <- "sid"
+    withinIV <- "Condition"
+    value <- "words"
+    fun <- cm.ci
+    conf.level <- pnorm(1)-pnorm(-1)
+  #end test
+  }
+    
   # Get levels of withinIV as separate columns
   command <- paste0("DFwide <- dcast(DF, ", ID, " ~ ", withinIV, ", value.var=\"", value, "\")")
   #cat(command, "\n")
@@ -54,20 +68,34 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
 
   DFout <- cbind(DFout, desc)
 
+  bs <- data.frame(bs.ci(DFwide))
+  colnames(bs) <- c("bs.lower.t.95", "bs.upper.t.95")
+  bs$bs.confint.t.95 <- (bs$bs.upper.t.95 - bs$bs.lower.t.95) / 2
+    
+  DFout <- cbind(DFout, bs)
+  
+  DFout
+
 }
 
 mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.level=.95)
   # This actually works out the same as just splitting data into groups and running cm.ci for each group separately
 {
+  test <- F
+  if (test)
+  {
   # testing
   #DF <- words.cut
-  #ID <- "sid"
-  #betweenIV <- "VRRW"
-  #withinIV <- "Condition"
-  #value <- "words"
-  #group.var<-"first"
-  #fun <- cm.ci.mixed
+    DF <- data$DF
+    ID <- "sid"
+    betweenIV <- "VRRW"
+    withinIV <- "Condition"
+    value <- "words"
+    group.var<-"first"
+    fun <- cm.ci.mixed
+    conf.level <- pnorm(1)-pnorm(-1)
   # end testing
+  }
   # Get levels of withinIV as separate columns
   command <- paste0("DFwide <- dcast(DF, ", ID, " + ", betweenIV, " ~ ", withinIV, ", value.var=\"", value, "\")")
   cat(command, "\n")
@@ -101,6 +129,56 @@ mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.
   eval(parse(text=command))
   
   DFout <- cbind(DFout, desc)
+  
+  # between subject CIs based on t distribution
+  # Basically considering all groups as between subjects then, so get separate factors from first column and make them extra columns
+  # Note that bs.ci calls confint, and because of the way confint works, the intervals are slightly smaller when the data is passed
+  # as one design (not conditions separately)
+  # But as one design, the CIs are not around the mean!
+  # Old code for one design:
+  # First add id
+  #temp <- ddply(DFwide, names(DFwide)[1], function(x) transform(x, id=1:nrow(x)) )
+  #temp$id <- factor(temp$id)
+  
+  # Then melt and cast based on ID
+  #m <- melt(temp)
+  #temp <- dcast(m, id ~ ...)
+  #temp$id <- NULL # remove ID column
+  
+  #cat("Going to run bs.ci on this:\n")
+  #print(temp)
+  #bs <- data.frame(bs.ci(temp))
+  
+  #temp2 <- temp[,1:2]
+  #temp2 <- temp2[!is.na(temp2[,1]),]
+  #temp3 <- data.frame( bs.ci(temp2) )
+  #(temp3$upper - temp3$lower) / 2 + temp3$lower
+  
+  #colnames(bs) <- c("bs.lower.t.95", "bs.upper.t.95")
+  #bs$bs.confint.t.95 <- (bs$bs.upper.t.95 - bs$bs.lower.t.95) / 2
+  
+  # Separate based on between subject var first:
+  bs <- ddply(DFwide, names(DFwide)[1], function(x) { x[,1] <- NULL; y <- data.frame(bs.ci(x)); y$Condition <- factor(colnames(x)); y } )
+  bs <- bs[order(bs$VRRW, bs$Condition),]
+  bs$bs.confint.t.95 <- (bs$upper - bs$lower) / 2
+  bs$bs.midpoint <- bs$lower + bs$bs.confint.t.95
+  colnames(bs)[2:3] <- c("bs.lower.t.95", "bs.upper.t.95")
+  
+  cat("Check row names match conditions, they are going to be cbind'd:\n")
+  print(bs)
+  DFout <- DFout[order(DFout$VRRW, DFout$Condition),]
+  print(DFout)
+  bs[,1] <- NULL # don't need condition name
+  
+  DFout <- cbind(DFout, bs)
+
+  if (all(DFout$mean + .1 > DFout$bs.midpoint & DFout$mean - .1 < DFout$bs.midpoint))
+  {
+    cat("Confirmed CI midpoint and mean are the same.\n")
+    DFout$bs.midpoint <- NULL
+  }else warning("Between subjects CI midpoint and mean are different!\n") # something went wrong
+      
+  DFout
 }
 
 # Promoted to sigeng:

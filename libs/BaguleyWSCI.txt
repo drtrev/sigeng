@@ -30,7 +30,7 @@ bs.ci <- function(data.frame, conf.level = 0.95, difference = FALSE) {
     k = ncol(data.frame)
     n <- nrow(data.frame)
     df.stack <- stack(data.frame)
-    group.means <- mean(data.frame, na.rm = TRUE)
+    group.means <- colMeans(data.frame, na.rm = TRUE)
     if (difference == TRUE) 
         ci.mat <- (confint(lm(values ~ 0 + ind, df.stack)) - group.means) * 
             2^0.5/2 + group.means
