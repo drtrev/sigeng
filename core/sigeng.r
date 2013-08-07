@@ -1889,6 +1889,7 @@ outliers.getidx <- function(dv, method, method.param=NULL)
 # Simply gets the indexes of outliers. See outliers() for details of method and method.param
 {
   idx <- NULL
+  highlow <- NULL
   if (method=="classic")
   {
     cat("Using classic method for detecting outliers.\n")
@@ -1904,17 +1905,24 @@ outliers.getidx <- function(dv, method, method.param=NULL)
     }
 
     # Get idx's of outliers
-    idx <-        which(dv > mean(dv) + sd(dv) * method.param)
-    idx <- c(idx, which(dv < mean(dv) - sd(dv) * method.param))
+    idx     <- which(dv > mean(dv) + sd(dv) * method.param)
+    if (length(idx) > 0) highlow <- rep("high", length(idx))
+    idx2    <- which(dv < mean(dv) - sd(dv) * method.param)
+    if (length(idx2) > 0) highlow <- c(highlow, rep("low", length(idx2)))
+    idx <- c(idx, idx2)
+    #cat("outliers.getidx() highlow:\n")
+    #print(highlow)
   }
   if (method=="boxplot")
   {
     idx <- which(dv %in% boxplot(dv)$out)
+    # TODO need to set highlow for boxplot()$out
   }
   if (method=="out")
   {
     # TODO note could do this in matrix form, col1 is var1 and col2 is var2 (then it plots it for you!)
     idx <- out(dv)$out.id
+    # TODO need to set highlow for out()
   }
   if (method=="ggboxplot") stop("sigeng: outliers.getidx() method ggboxplot not yet implemented.")
   if (is.null(idx)) stop(paste("sigeng: outliers.getidx() method not found:", method))
@@ -1925,7 +1933,11 @@ outliers.getidx <- function(dv, method, method.param=NULL)
     print(idx)
   }
 
-  return(idx)
+  if (length(highlow) != length(idx)) stop("outliers.getidx(): highlow and idx are of different lengths.")
+
+  highlow <- factor(highlow, levels=c("high", "low"))
+
+  return(list(idx=idx, highlow=highlow))
 }
 
 find.row <- function(DF, row)
@@ -1935,118 +1947,193 @@ find.row <- function(DF, row)
   return(NULL)
 }
 
-outliers.respond <- function(params, method, method.param, response, response.param)
+outliers.respond <- function(params, split.blocks, method, method.param, response, response.param)
 # See outliers() for details
 {
   if (length(params$DVs) > 1) stop("sigeng: outliers.respond() only deals with 1 DV for now")
 
   DF <- params$DF # easier
 
-  idx <- outliers.getidx(DF[,params$DVs[1]], method, method.param)
-
-  responded <- F
-
-  if (response=="meanotherblocks" || response=="meanblocks")
-  {
-    if (is.null(params$blocks)) stop("sigeng: outliers.respond() no blocks defined")
-
-    responded <- T
-
-    # Go through idx
-    for (i in idx)
+  if (!split.blocks) {
+    temp <- outliers.getidx(DF[,params$DVs[1]], method, method.param)
+    idx <- temp$idx
+    highlow <- temp$highlow
+  }else{
+    # Get index for each block, but update idx based on position in original DF
+    # It actually uses the row names of the DF for the new idx, which could be character strings but must be unique
+    #cat("Check row numbers:\n")
+    #print(head(DF))
+    origidx <- NULL
+    highlow <- factor(NA, levels=c("high", "low")) # need to start with NA to append with unlist(list())
+    for (b in levels(DF[,params$blocks]))
     {
-      # TODO can I just use find.row (above function)?
-      cat("Outlier row:\n")
-      print(DF[i,])
-      # lookup other blocks for same ID and IVs
-      # So first get current block, ID, and IVs
-      currentBlock <- DF[i,params$blocks]
-      #cat("currentBlock:\n")
-      #print(currentBlock)
-      currentId <- DF[i,params$IDs]
-      #cat("CurrentId:\n")
-      #print(currentId)
-      #cat("params$withinIVs:\n")
-      #print(params$withinIVs)
-      currentWithinIVs <- DF[i,params$withinIVs, drop=F] # don't drop, so if there's only one column it will stay as a DF
-      #cat("CurrentWithinIVs:\n")
-      #print(currentWithinIVs)
-      #print(class(currentWithinIVs))
-      currentBetweenIVs <- DF[i,params$betweenIVs, drop=F]
-      lookupBlocks <- levels(DF[,params$blocks])[levels(DF[,params$blocks])!=currentBlock]
-      #cat("lookupBlocks:\n")
-      #print(lookupBlocks)
-
-      # Now look them all up
-      # Make a DF of currentWithinIVs for comparison
-      currentWithinIVsDF  <- ldply(1:nrow(DF), function(x) currentWithinIVs)
-      currentBetweenIVsDF <- ldply(1:nrow(DF), function(x) currentBetweenIVs)
-      # Set matching cells to True
-      #print(class(currentWithinIVsDF))
-      #print(class(DF[,params$withinIVs, drop=F]))
-
-      if (length(params$withinIVs) > 0) {
-        #print(currentWithinIVsDF)
-        logicalWithinIVMatch <- DF[,params$withinIVs, drop=F] == currentWithinIVsDF
-        #print(logicalWithinIVMatch)
-        rowsWithin <- aaply(logicalWithinIVMatch, 1, all)
-        #print(rowsWithin)
-      } else rowsWithin <- rep(T, nrow(DF))
-
-      if (length(params$betweenIVs) > 0) {
-        logicalBetweenIVMatch <- DF[,params$betweenIVs, drop=F] == currentBetweenIVsDF
-        # When whole row matches set it to True
-        rowsBetween <- aaply(logicalBetweenIVMatch, 1, all)
-      } else rowsBetween <- rep(T, nrow(DF))
-
-      # When both within and between rows match:
-      rows <- rowsWithin & rowsBetween
-      values <- DF[DF[,params$IDs] == currentId & DF[,params$blocks] %in% lookupBlocks & rows,]
-      #cat("Replacement values found:\n")
-      #print(values)
-      #cat("Those were the values.\n")
-      replace.value <- mean(values[,params$DVs[1]]) # response=="meanotherblocks"
-      if (response=="meanblocks") replace.value <- mean(c(values[,params$DVs[1]], DF[i,params$DVs[1]]))
-
-      #DF[DF[,params$IDs] == currentId & DF[,params$blocks] == currentBlock & rows,params$DVs[1]] <- replace.value
-      cat(paste("Original value:", DF[i, params$DVs[1]], "replaced with:", replace.value, "\n"))
-      DF[i, params$DVs[1]] <- replace.value
+      DFcut <- DF[DF[,params$blocks]==b,]
+      cat("Block:", b, "\n")
+      temp <- outliers.getidx(DFcut[,params$DVs[1]], method, method.param)
+      idx <- temp$idx
+      if (length(temp$highlow) > 0) highlow <- unlist(list(highlow, temp$highlow))
+      #cat("highlow5:\n")
+      #print(highlow)
+      #print(temp$highlow)
+      for (i in idx)
+      {
+        #cat("idx:", i, "\n")
+        #cat("row:\n")
+        #print(DFcut[i,])
+        #cat("row number:\n")
+        rown <- row.names(DFcut[i,]) 
+        #print(rown)
+        #cat("original row:\n")
+        #print(DF[rown,])
+        origidx <- c(origidx, rown)
+      }
+      #cat("Done split blocks outlier check. origidx:", origidx, "\n")
     }
+    idx <- origidx
+    #cat("idx is now:", idx, "\n")
+    if (length(highlow) > 1) highlow <- highlow[2:length(highlow)] # remove first NA
+    else highlow <- NULL
   }
 
-  if (response=="NA")
+  #cat("######\n")
+  #cat("idx:\n")
+  #print(idx)
+  #cat("highlow:\n")
+  #print(highlow)
+  #cat("######\n")
+
+  if (!is.null(idx))
   {
-    DF[idx,params$DVs[1]] <- NA
-    responded <- T
-  }
+    responded <- F
 
-  if (response=="convert")
-  {
-    # Check we've got a response.param
-    if (is.null(response.param) || !is.numeric(response.param))
-      stop("sigeng: outliers.respond() response is convert but missing response param")
+    #cat("Choosing response...\n")
 
-    responded <- T
-
-    # Get mean and sd
-    m <- mean(DF[,params$DVs[1]])
-    s <- sd(DF[,params$DVs[1]])
-    for (i in idx)
+    if (response=="meanotherblocks" || response=="meanblocks")
     {
-      cat("Outlier row:\n")
-      print(DF[i,])
-      cat(paste("Original value:", DF[i, params$DVs[1]]))
-      # first is it a high or low outlier?
-      if (DF[i, params$DVs[1]] < m)
-        DF[i, params$DVs[1]] <- m - response.param * s
-      else
-        DF[i, params$DVs[1]] <- m + response.param * s
+      if (is.null(params$blocks)) stop("sigeng: outliers.respond() no blocks defined")
 
-      cat(paste(" replaced with:", DF[i, params$DVs[1]], "\n"))
+      responded <- T
+
+      cat("Responding with mean of other blocks\n")
+      #print(idx)
+
+      # Go through idx. Note idx could be character string or numeric, and can be used like this: DF[i,]
+      for (i in idx)
+      {
+        # TODO can I just use find.row (above function)?
+        cat("Outlier row:\n")
+        print(DF[i,])
+        # lookup other blocks for same ID and IVs
+        # So first get current block, ID, and IVs
+        currentBlock <- DF[i,params$blocks]
+        #cat("currentBlock:\n")
+        #print(currentBlock)
+        currentId <- DF[i,params$IDs]
+        #cat("CurrentId:\n")
+        #print(currentId)
+        #cat("params$withinIVs:\n")
+        #print(params$withinIVs)
+        currentWithinIVs <- DF[i,params$withinIVs, drop=F] # don't drop, so if there's only one column it will stay as a DF
+        #cat("CurrentWithinIVs:\n")
+        #print(currentWithinIVs)
+        #print(class(currentWithinIVs))
+        currentBetweenIVs <- DF[i,params$betweenIVs, drop=F]
+        lookupBlocks <- levels(DF[,params$blocks])[levels(DF[,params$blocks])!=currentBlock]
+        #cat("lookupBlocks:\n")
+        #print(lookupBlocks)
+
+        # Now look them all up
+        # Make a DF of currentWithinIVs for comparison
+        currentWithinIVsDF  <- ldply(1:nrow(DF), function(x) currentWithinIVs)
+        currentBetweenIVsDF <- ldply(1:nrow(DF), function(x) currentBetweenIVs)
+        # Set matching cells to True
+        #print(class(currentWithinIVsDF))
+        #print(class(DF[,params$withinIVs, drop=F]))
+
+        if (length(params$withinIVs) > 0) {
+          #print(currentWithinIVsDF)
+          logicalWithinIVMatch <- DF[,params$withinIVs, drop=F] == currentWithinIVsDF
+          #print(logicalWithinIVMatch)
+          rowsWithin <- aaply(logicalWithinIVMatch, 1, all)
+          #print(rowsWithin)
+        } else rowsWithin <- rep(T, nrow(DF))
+
+        if (length(params$betweenIVs) > 0) {
+          logicalBetweenIVMatch <- DF[,params$betweenIVs, drop=F] == currentBetweenIVsDF
+          # When whole row matches set it to True
+          rowsBetween <- aaply(logicalBetweenIVMatch, 1, all)
+        } else rowsBetween <- rep(T, nrow(DF))
+
+        # When both within and between rows match:
+        rows <- rowsWithin & rowsBetween
+        values <- DF[DF[,params$IDs] == currentId & DF[,params$blocks] %in% lookupBlocks & rows,]
+
+        # Check the values being used for replacement are not themselves outliers!
+        for (replacementidx in row.names(values))
+        {
+          if (replacementidx %in% idx) warning("Replacement is also an outlier! That also means one of the replacements will be incorrect")
+        }
+
+        #cat("Replacement values found:\n")
+        #print(values)
+        #cat("Those were the values.\n")
+        replace.value <- mean(values[,params$DVs[1]]) # response=="meanotherblocks"
+        if (response=="meanblocks") replace.value <- mean(c(values[,params$DVs[1]], DF[i,params$DVs[1]]))
+
+        # Check the values being used for replacement are not higher if the outlier is "high" or lower if the outlier is "low"
+        #cat("highlow:\n")
+        #print(highlow)
+        if (!is.null(highlow)) {
+          currenthighlow <- highlow[which(i==idx)]
+          warn <- F
+          if (currenthighlow=="high" && replace.value > DF[i, params$DVs[1]]) warn <- T
+          if (currenthighlow=="low" && replace.value < DF[i, params$DVs[1]]) warn <- T
+          if (warn) warning(paste0("Replacing outlier with further outlying value! idx: ", idx, ", original value: ", DF[i, params$DVs[1]], ", replacement: ", replace.value))
+        }
+
+        #DF[DF[,params$IDs] == currentId & DF[,params$blocks] == currentBlock & rows,params$DVs[1]] <- replace.value
+        cat(paste("Original value:", DF[i, params$DVs[1]], "replaced with:", replace.value, "\n"))
+        DF[i, params$DVs[1]] <- replace.value
+      }
     }
+
+    if (response=="NA")
+    {
+      DF[idx,params$DVs[1]] <- NA
+      responded <- T
+    }
+
+    if (response=="convert")
+    {
+      # Check we've got a response.param
+      if (is.null(response.param) || !is.numeric(response.param))
+        stop("sigeng: outliers.respond() response is convert but missing response param")
+
+      responded <- T
+
+      # Get mean and sd
+      m <- mean(DF[,params$DVs[1]])
+      s <- sd(DF[,params$DVs[1]])
+      for (i in idx)
+      {
+        cat("Outlier row:\n")
+        print(DF[i,])
+        cat(paste("Original value:", DF[i, params$DVs[1]]))
+        # first is it a high or low outlier?
+        if (DF[i, params$DVs[1]] < m)
+          DF[i, params$DVs[1]] <- m - response.param * s
+        else
+          DF[i, params$DVs[1]] <- m + response.param * s
+
+        cat(paste(" replaced with:", DF[i, params$DVs[1]], "\n"))
+      }
+    }
+
+    if (!responded) stop(paste("sigeng: outliers.respond() response not found:", response))
+  }else{
+    cat("No outliers found.\n")
   }
 
-  if (!responded) stop(paste("sigeng: outliers.respond() response not found:", response))
   return(DF)
 }
 
@@ -2070,10 +2157,13 @@ outliers <- function(params, method="classic", method.param=2, split.blocks=F, r
     stop("sigeng: outliers() missing DF, DVs or IDs")
 
   # this is done in outliers.respond: if (length(params$DVs) > 1) stop("sigeng: outliers() only deals with 1 DV for now")
-  if (!split.blocks)
-  {
-    params$DF <- outliers.respond(params, method, method.param, response, response.param)
-  }
+  #if (!split.blocks)
+  #{
+    params$DF <- outliers.respond(params, split.blocks, method, method.param, response, response.param)
+    # TODO after responding with mean of other blocks or of all blocks, check new point is not an outlier!
+  #}
+
+  #if (response=="meanotherblocks" || response=="meanblocks") cat("NOTE: Look at the output. Check the response did not replace an outlier by an outlier from another block!\n")
 
   return(params$DF)
 }
