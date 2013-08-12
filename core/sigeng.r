@@ -1829,8 +1829,35 @@ file.overwrite.prompt <- function(filename=stop("file.overwrite.prompt: no filen
   return(overwrite)
 }
 
-remake.check <- function(fun.call, cache.file)
-  # e.g. if (!remake) remake <- remake.check(match.call(), "cache/analyse-fun.call.Rdata")
+remake.check <- function(fun.call, cache.file, clobber=F)
+  # e.g. remake <- remake | remake.check(match.call(), "cache/analyse.fun.call.Rdata", clobber=T) # Need to call remake.check to clobber the cache. Single | does not short-circuit.
+
+  # cache.file <- "cache/analyse.Rdata"
+  # if (remake) {
+  #   ... # reload/process/format DF
+  #   save(DF, file=cache.file)
+  # }else{
+  #   load(cache.file)
+  # }
+  #
+  # If clobber is true and we need a remake then the new function call will be saved (and file clobbered if it exists).
+  #
+  # Otherwise you'll need to do this instead:
+  #
+  # cache.fun.call <- "cache/analyse.fun.call.Rdata"
+  # fun.call <- match.call()
+  # if (!remake) remake <- remake.check(fun.call, cache.fun.call)
+  # ...
+  # cache.file <- "cache/analyse.Rdata"
+  # if (remake) {
+  #   save(fun.call, file=cache.fun.call)
+  #   ...
+  #   ... # reload/process/format DF
+  #   save(DF, file=cache.file)
+  # }else{
+  #   load(cache.file)
+  # }
+  #
   # General workflow:
   # Raw data (e.g. *.xml, potentially appended to in case of a crash)
   # -> Files ready to be read and processed (e.g. *-r.xml with only the last <?xml> cut out. Remove these files to remake them.)
@@ -1880,6 +1907,12 @@ remake.check <- function(fun.call, cache.file)
   }else{
     cat("No cache of function call, will remake.\n")
     remake <- T
+  }
+
+  if (remake && clobber)
+  {
+    # Create/update cache.file
+    save(fun.call, file=cache.file)
   }
   
   remake
@@ -1940,11 +1973,17 @@ outliers.getidx <- function(dv, method, method.param=NULL)
   return(list(idx=idx, highlow=highlow))
 }
 
-find.row <- function(DF, row)
-# TODO allow partial matches i.e. some columns not listed in row
+find.row <- function(DF, searchlist, return.idx=F)
+# e.g. find.row(thresholds, find.row(thresholds, list(staircaseID=1, sid="01", xzratio=2))
+# return.idx means return the row numbers (integer) instead of the rows themselves
+# Note: R will warn if some objects in searchlist are not a multiple of shorter object lengths.
 {
-  for (i in 1:nrow(df)) if (all(df[i,] == row)) return(i)
-  return(NULL)
+  #for (i in 1:nrow(df)) if (all(df[i,] == row)) return(i)
+  #return(NULL)
+  mat <- DF[,names(searchlist)]==searchlist
+  logv <- aaply(mat, 1, all)
+  if (!return.idx) return(DF[logv,])
+  else return(which(unname(logv)))
 }
 
 outliers.respond <- function(params, split.blocks, method, method.param, response, response.param)
@@ -2460,3 +2499,16 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
   }
 
 }
+
+
+# Adapted from: http://www.r-bloggers.com/visual-debugging-with-rstudio/
+debugonce.fun <- function(f){ 
+  fname = deparse(substitute(f))
+  debugfile <- tempfile("debug-", ".", fileext=".r")
+  dump(fname, file = debugfile) 
+  source(debugfile)
+  cat("Debug file:", debugfile, "\n")
+  do.call("debugonce", args = list(fname), envir = globalenv()) 
+  invisible(NULL) 
+}
+
