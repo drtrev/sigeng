@@ -1974,7 +1974,7 @@ outliers.getidx <- function(dv, method, method.param=NULL)
 }
 
 find.row <- function(DF, searchlist, return.idx=F)
-# e.g. find.row(thresholds, find.row(thresholds, list(staircaseID=1, sid="01", xzratio=2))
+# e.g. find.row(thresholds, list(staircaseID=1, sid="01", xzratio=2))
 # return.idx means return the row numbers (integer) instead of the rows themselves
 # Note: R will warn if some objects in searchlist are not a multiple of shorter object lengths.
 {

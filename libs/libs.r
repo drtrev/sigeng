@@ -28,6 +28,32 @@ library(foreign) # for read.spss
 library(foreach)
 library(reshape)
 
+plot.mls.model <- function(data, binwidth=NULL, fullrange=F, dist=c("norm", "t"), distdf=10)
+# Take a vector of data points, do one dimensional method of least squares (i.e. take mean) and look at variance.
+# Plot the model and the data.
+# e.g.
+#  plot.mls.model(rnorm(1000)) # normal
+#  plot.mls.model(c(rnorm(1000), rnorm(10, sd=10))) # heavy tailed
+#  plot.mls.model(c(rnorm(1000), rnorm(10, sd=10)), dist="t") # heavy tailed with t instead
+{
+  dist <- match.arg(dist)
+  r <- range(data)
+  w <- r[2] - r[1]
+  med <- median(data)
+  m <- mad(data)
+  if (is.null(binwidth)) { binwidth <- m/5; cat("Binwidth:", binwidth, "\n") }
+  if (!fullrange) xs <- seq(med - m*5, med + m*5, length.out=100) # 100 steps in distribution approximation
+  else xs <- seq(r[1], r[2], length.out=100)
+
+  if (dist=="norm") ys <- dnorm(xs, mean=mean(data), sd=sd(data)) * length(data) * binwidth # convert to freq
+  else ys <- dt(xs, distdf) * length(data) * binwidth
+  #print(ys)
+  p <- qplot(data, binwidth=binwidth) + geom_line(data=data.frame(x=xs, y=ys), mapping=aes(x=x, y=y))
+  if (!fullrange) p <- p + scale_x_continuous(limits=c(med - m*5, med + m*5))
+  p
+}
+
+
 # This could be promoted to sigeng if it works:
 
 withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95)
@@ -47,6 +73,8 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
     conf.level <- pnorm(1)-pnorm(-1)
   #end test
   }
+
+  print(match.call())
     
   # Get levels of withinIV as separate columns
   command <- paste0("DFwide <- dcast(DF, ", ID, " ~ ", withinIV, ", value.var=\"", value, "\")")
