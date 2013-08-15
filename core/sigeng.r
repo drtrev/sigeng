@@ -2502,6 +2502,8 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
 
 
 # Adapted from: http://www.r-bloggers.com/visual-debugging-with-rstudio/
+# It doesn't seem necessary to make a sep file. Just use debug() and debugonce()
+# TODO remove this func.
 debugonce.fun <- function(f){ 
   fname = deparse(substitute(f))
   debugfile <- tempfile("debug-", ".", fileext=".r")
