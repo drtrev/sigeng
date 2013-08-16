@@ -2409,8 +2409,8 @@ psignifit.threshold <- function(f=0.5, alpha, beta)
   return (alpha - beta * log(1/f-1))
 }
 
-psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idvar="id", condvar=NULL, nafc=1, xmin=NULL,
-                           xlabel="Intensity", xticbreaks="auto", xticlabs="auto", colourlabel=NULL, titleprefix=NULL, title="default", threshold=T, nothreshleft=F, nothreshdown=F)
+psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, condlevels=NULL, idvar="id", condvar=NULL, nafc=1, xmin=NULL,
+                           xlabel="Intensity", ylabel="Response", xticbreaks="auto", xticlabs="auto", colourlabel=NULL, titleprefix=NULL, title="default", threshold=T, nothreshleft=F, nothreshdown=F)
   # Parameters:
   # DFthresh from psignifit.readthreshslope
   # DFpsi from DFsum$psignifit from DFsum <- psignifit.summariseFor
@@ -2448,19 +2448,32 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
       colnames(DFpsiidcond)[colnames(DFpsiidcond)==condvar] <- "cond"
       my.model$cond <- cond
       #print(head(DFpsiidcond))
-      #print(head(my.model))
+      print(my.model)
+      str(my.model)
 
       
+      DFpsiidcond.temp <- DFpsiidcond
+      DFoverall.temp <- DFoverall
+      my.model.temp <- my.model
+
+      if (!is.null(condlevels))
+      {
+        DFpsiidcond.temp$cond <- factor(DFpsiidcond.temp$cond, levels=unique(DFpsi[,condvar]), labels=condlevels)
+        DFoverall.temp$cond <- factor(DFoverall.temp$cond, levels=unique(DFoverall$cond), labels=condlevels)
+        #temp <- as.numeric(unique(my.model$cond))
+        # TODO levels might not actually be 1:3
+        my.model.temp$cond <- factor(my.model.temp$cond, levels=1:3, labels=condlevels)
+      }
 
       if (i == "all") {
         # use now the DFoverall for stderror etc.
 
-        p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
-             geom_errorbar(data=DFoverall, mapping=aes(x=remove.factor(x, "numeric"), y=mean, ymin=mean-std.error.adj, ymax=mean+std.error.adj, colour=cond, width=0.9)) +
-             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond))
+        p <- p + geom_point(data=DFpsiidcond.temp, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
+             geom_errorbar(data=DFoverall.temp, mapping=aes(x=remove.factor(x, "numeric"), y=mean, ymin=mean-std.error.adj, ymax=mean+std.error.adj, colour=cond, width=0.9)) +
+             geom_line(data=my.model.temp, mapping=aes(x=x, y=y, colour=cond))
       }else{
         p <- p + geom_point(data=DFpsiidcond, mapping=aes(x=remove.factor(x, "numeric"), y=y/n, colour=cond)) +
-             geom_line(data=my.model, mapping=aes(x=x, y=y, colour=cond))
+             geom_line(data=my.model.temp, mapping=aes(x=x, y=y, colour=cond))
       }
 
       if (nothreshleft && nothreshdown) threshold <- F
@@ -2479,6 +2492,11 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
         if (nafc > 1) lowbound <- 1 / nafc
         minxs <- min(remove.factor(DFpsi$x, "numeric"))
         DFthresh.temp <- data.frame(x=c(minxs, threshold.x), xend=rep(threshold.x, 2), y=rep(threshold.y, 2), yend=c(threshold.y, lowbound), cond=cond)
+        str(DFthresh.temp)
+        print(DFthresh.temp)
+        #temp <- unique(remove.factor(DFthresh.temp$cond, conver="numeric"))
+        # TODO levels might not actually be 1:3
+        if (!is.null(condlevels)) DFthresh.temp$cond <- factor(DFthresh.temp$cond, levels=1:3, labels=condlevels)
         if (nothreshleft) DFthresh.temp <- DFthresh.temp[2,]
         if (nothreshdown) DFthresh.temp <- DFthresh.temp[1,]
 
@@ -2487,7 +2505,7 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
 
     }
     if (is.null(title)) {
-      p <- p + labs(x=xlabel, colour=colourlabel)
+      p <- p + labs(x=xlabel, y=ylabel, colour=colourlabel)
     }else{
       if (title == "default") {
         if (is.null(titleprefix)) title.current <- paste("Participant", i, sep=" ")
@@ -2498,6 +2516,7 @@ psignifit.plot <- function(DFthresh, DFpsi, DFoverall, ids=NULL, conds=NULL, idv
     print(p)
   }
 
+  p
 }
 
 
