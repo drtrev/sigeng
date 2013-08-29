@@ -73,6 +73,7 @@ calcSignifDF <- function(DF, dv, sig)
 #       text   = "***"
 #     )
 #)
+# Can also specifiy p value to autogenerate text.
 # Return signifDF, i.e. x, y, xend, yend, quest=...
 {
   signifDF <- NULL
@@ -114,6 +115,10 @@ calcSignifDF <- function(DF, dv, sig)
       x <- which(levels(DFcut[,xvariable]) == firstvalue)
       xend <- which(levels(DFcut[,xvariable]) == secondvalue)
 
+      cat("X and xend:\n")
+      print(x)
+      print(xend)
+
       ####
       # Dodge vertically
       # Go through from x to xend in DFcut and push it above the max value
@@ -125,8 +130,11 @@ calcSignifDF <- function(DF, dv, sig)
 
       # Now dodge prev ypos's
 
-      if (s[["cut"]][["name"]] != lastcut[["name"]] || s[["cut"]][["value"]] != lastcut[["value"]]) { xposStore <- NULL; yposStore <- -Inf } # reset
-      lastcut <- list(name=s[["cut"]][["name"]], value=s[["cut"]][["value"]]) # store last cut
+      if (!is.null(s[["cut"]]))
+      {
+        if (s[["cut"]][["name"]] != lastcut[["name"]] || s[["cut"]][["value"]] != lastcut[["value"]]) { xposStore <- NULL; yposStore <- -Inf } # reset
+        lastcut <- list(name=s[["cut"]][["name"]], value=s[["cut"]][["value"]]) # store last cut
+      }
 
       # pull out yposStore values where the corresponding xposStore values are within the range x:xend
       yposDodge <- NULL
@@ -246,6 +254,8 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
   # NB: 'layers' stores a list of evaluated layers, e.g. geom_boxplot()
   #     'plotOptions' stores a list of unevaluated strings, e.g. "scale_x_discrete(...)" which could come from the user
 
+cat("SummaryDF:\n") # TODO remove this output
+print(summaryDF)# TODO and here
   ####
   # 1. Prepare summary DFs
 
@@ -253,11 +263,15 @@ plotit <- function(DF, meansDF, summaryDF, fit, plothash, nosave=F) #x="variable
     # make a new variable, which is named by joining all parts of "combine", e.g. "body.sync"
     newvar <- paste(plothash[["combine"]], collapse=".")
 
-    # Set the value to be the combination of other variables, the value of "combine", e.g. c("body", "sync")
-    # would make Body.Synchronous, Body.Asynchronous etc.
-    summaryDF[,newvar] <- do.call(paste, c(summaryDF[ , plothash[["combine"]] ], sep=".") )
-    # Don't allow for alphabetical order, take levels from the order they appear in DF
-    summaryDF[,newvar] <- factor(summaryDF[,newvar], levels=unique(summaryDF[,newvar]))
+    if (all(aaply(plothash[["combine"]], 1, function(x) x %in% colnames(summaryDF))))
+    { # If the combine variables actually exist in summaryDF
+
+      # Set the value to be the combination of other variables, the value of "combine", e.g. c("body", "sync")
+      # would make Body.Synchronous, Body.Asynchronous etc.
+      summaryDF[,newvar] <- do.call(paste, c(summaryDF[ , plothash[["combine"]] ], sep=".") )
+      # Don't allow for alphabetical order, take levels from the order they appear in DF
+      summaryDF[,newvar] <- factor(summaryDF[,newvar], levels=unique(summaryDF[,newvar]))
+    }
 
     # Same again for main DF, because that's also used for some plots
     DF[,newvar] <- do.call(paste, c(DF[ , plothash[["combine"]] ], sep=".") )
@@ -1052,7 +1066,10 @@ doplot <- function(dv, params)
       #if (is.factor(DF[,biv])) meansdf[,biv] <- factor(meansdf[,biv], levels=levels(DF[,biv]))
       ##print(meansdf)
 
-      summarydf <- calcSummaryDF(DF, biv, dv)
+      #summarydf <- calcSummaryDF(DF, biv, dv)
+      warning("Clobbering variable called bivconc")
+      DF$bivconc <- factor(paste(getConc(DF, betweenIVs), DF$conc, sep="."))
+      summarydf <- calcSummaryDF(DF, "bivconc", dv)
 
       #if (length(withinIVs) == 1) {
       #  colnames(meansdf)[4] <- "wiv"
@@ -2177,6 +2194,8 @@ outliers.respond <- function(params, split.blocks, method, method.param, respons
 }
 
 outliers <- function(params, method="classic", method.param=2, split.blocks=F, response="meanotherblocks", response.param=NULL)
+# IMPORTANT: This function expects you to split based on withinIVs and betweenIVs. It uses the whole dv to determine outliers and response.
+# The only reason you pass withinIVs and betweenIVs for the meanotherblocks method.
 # requires DF, DVs, blocks, IDs, withinIVs, betweenIVs
 # method is either "classic", "boxplot", or TODO "ggboxplot", "out" from WRS
 # method.param is currently just for classic, and corresponds to the number of SDs to consider it an outlier
@@ -2194,6 +2213,8 @@ outliers <- function(params, method="classic", method.param=2, split.blocks=F, r
   # Error check (useful if calling from outside sigeng() )
   if (is.null(params$DF) || is.null(params$DVs) || is.null(params$IDs))
     stop("sigeng: outliers() missing DF, DVs or IDs")
+
+  warning("Checking for outliers based on the whole DV")
 
   # this is done in outliers.respond: if (length(params$DVs) > 1) stop("sigeng: outliers() only deals with 1 DV for now")
   #if (!split.blocks)
