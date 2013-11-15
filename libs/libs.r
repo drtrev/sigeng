@@ -106,7 +106,7 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
 
 }
 
-mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.level=.95)
+mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.level=.95, remove.na=F)
   # This actually works out the same as just splitting data into groups and running cm.ci for each group separately
 {
   test <- F
@@ -130,6 +130,15 @@ mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.
   eval(parse(text=command))
 
   DFwide[,ID] <- NULL
+
+  if (remove.na)
+  {
+    # There must be an easier way...
+    temp5 <- adply(DFwide, 1, is.na) # get it as T/F
+    temp6 <- adply(temp5, 1, function(x) all(x==F))$V1
+    DFwide <- DFwide[temp6,]
+  }
+
   cat("DFwide - check all good here, should have first column as group, then one column for each within level:\n")
   print(DFwide)
 
