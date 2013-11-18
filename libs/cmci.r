@@ -3,7 +3,7 @@
 # reveals that conf.level=.95 and difference=T gives error bars that can be used for inference.
 # Also note that difference=T is making error bars smaller.
 
-source("cmci-funcs.r")
+source("~/reps/sigeng/libs/cmci-funcs.r")
 
 for (i in 1:1000)
 {
@@ -38,7 +38,7 @@ desc$lower <- desc$mean - desc$bs.ci.half
 
 args(my.bs.ci)
 #debugonce(my.bs.ci)
-bs.ci.diff <- my.bs.ci(data, value, variable, conf.level=.95, difference=T)
+bs.ci.diff <- my.bs.ci(data, id, value, variable, conf.level=.95, difference=T)
 bs.ci.diff
 
 wide <- dcast(data, id ~ variable)
@@ -67,7 +67,7 @@ ml.ci.test.comp.symm # same CIs as each other when using comp.symm (i.e. one CI 
 #t.test(wide$X1, wide$X2, paired=T)
 limits <- c(-2, 2)
 ggplot(test$CI, aes(ymin=lower, ymax=upper, x=variable)) + geom_errorbar(width=.1) + scale_y_continuous(limits=limits)
-ggplot(desc, aes(ymin=mean-bs.ci, ymax=mean+bs.ci, x=variable)) + geom_errorbar(width=.1) + scale_y_continuous(limits=limits)
+ggplot(desc, aes(ymin=mean-bs.ci.half, ymax=mean+bs.ci.half, x=variable)) + geom_errorbar(width=.1) + scale_y_continuous(limits=limits)
 ggplot(bs.ci.diff$CI, aes(ymin=lower, ymax=upper, x=variable)) + geom_errorbar(width=.1) + scale_y_continuous(limits=limits)
 ggplot(lm.ci.diff, aes(ymin=lower, ymax=upper, x=variable)) + geom_errorbar(width=.1) + scale_y_continuous(limits=limits)
 ggplot(desc, aes(ymin=mean-bs.std.error, ymax=mean+bs.std.error, x=variable)) + geom_errorbar(width=.1) + scale_y_continuous(limits=limits)
