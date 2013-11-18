@@ -60,6 +60,7 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
 # For std.error can use conf.level=pnorm(1)-pnorm(-1) i.e. coverage level of std.error
 # (pnorm(1.96)-pnorm(-1.96) is .95 conf level)
 {
+  if (conf.level != .05) warning("mixed.ci: withinsubjects.ci difference==T so conf level should be .95")
   # Safety when testing
   test <- F
   if (test)
@@ -109,6 +110,7 @@ withinsubjects.ci <- function(DF, ID, withinIV, value, fun=cm.ci, conf.level=.95
 mixed.ci <- function(DF, ID, betweenIV, withinIV, value, fun=cm.ci.mixed , conf.level=.95, remove.na=F)
   # This actually works out the same as just splitting data into groups and running cm.ci for each group separately
 {
+  if (conf.level != .05) warning("mixed.ci: cm.ci.mixed difference==T so conf level should be .95")
   test <- F
   if (test)
   {
