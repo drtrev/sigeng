@@ -214,6 +214,8 @@ my.cm.ci.mixed <- function(data, id, dv, within, between, conf.level=0.95, diffe
     between <- as.character(args$between)
   }
   
+  # The idea here is: make it wide, remove NA rows, throw it in baguley's mixed function to check we get the same results,
+  # make it long again and throw it in my.cm.ci (which also tests against baguley's cmci function).
   wide <- dcast(data, as.formula(paste(id, "+", between, "~", within)), value.var=dv)
   wide
   #wide <- dcast(data, as.formula(paste(id, "~", within)), value.var=dv)
