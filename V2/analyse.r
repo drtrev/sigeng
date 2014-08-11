@@ -96,12 +96,18 @@ analyse <- function(dat, analysis)
   
   analysis.anova.type2 <- function(dat)
   {
+    # For within-subjects, if participant has missing value then remove participant
+    remove.ids <- dat[is.na(dat$value),"id"]
+    dat <- dat[!(dat$id %in% remove.ids),]
     out <- ezANOVA(dat, dv=value, wid=id, within=.(factor1, factor2), type=2)
     out$ANOVA$p
   }
 
   analysis.anova.type3 <- function(dat)
   {
+    # For within-subjects, if participant has missing value then remove participant
+    remove.ids <- dat[is.na(dat$value),"id"]
+    dat <- dat[!(dat$id %in% remove.ids),]
     out <- ezANOVA(dat, dv=value, wid=id, within=.(factor1, factor2), type=3)
     out$ANOVA$p
   }
@@ -141,7 +147,7 @@ analyse <- function(dat, analysis)
   {
     pvals <- analysis.lme(dat)
   }
-  if (is.null(pval)) stop("Invalid analysis supplied")
+  if (is.null(pvals)) stop("Invalid analysis supplied")
   
   analysis$factor1.pval <- pvals[1]
   analysis$factor2.pval <- pvals[2]

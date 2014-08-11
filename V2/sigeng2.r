@@ -1,5 +1,7 @@
 # Keep simple
 
+rm(list=ls())
+
 ###
 # Diagnostics:
 # outliers, normality
@@ -66,4 +68,7 @@ sim <- function(analyses, N=30)
 
 pvals <- aaply(1:100, 1, function(x) sim(analyses))
 sum(pvals < .05)
+pvals
 
+pvals.all <- c(pvals, pvals2)
+sum(pvals.all < .05)
