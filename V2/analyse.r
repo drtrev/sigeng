@@ -99,6 +99,7 @@ analyse <- function(dat, analysis)
     # For within-subjects, if participant has missing value then remove participant
     remove.ids <- dat[is.na(dat$value),"id"]
     dat <- dat[!(dat$id %in% remove.ids),]
+    dat$id <- factor(dat$id)
     out <- ezANOVA(dat, dv=value, wid=id, within=.(factor1, factor2), type=2)
     out$ANOVA$p
   }
@@ -108,6 +109,7 @@ analyse <- function(dat, analysis)
     # For within-subjects, if participant has missing value then remove participant
     remove.ids <- dat[is.na(dat$value),"id"]
     dat <- dat[!(dat$id %in% remove.ids),]
+    dat$id <- factor(dat$id)
     out <- ezANOVA(dat, dv=value, wid=id, within=.(factor1, factor2), type=3)
     out$ANOVA$p
   }
