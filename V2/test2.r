@@ -57,3 +57,31 @@ sum(out < .05) / 1000 # about 14%
 
 # 1-(1-0.05)^3 = 0.14
 
+dat <- generate.dat()
+head(dat)
+
+model1 <- lm(value ~ 1, dat)
+model2 <- lm(value ~ 1 + factor1, dat)
+model3 <- lm(value ~ 1 + factor1 + factor2, dat)
+model4 <- lm(value ~ 1 + factor1 + factor2 + factor1:factor2, dat)
+anova(model1, model2, model3, model4)
+
+aov1 <- aov(value ~ factor1*factor2, dat)
+summary(aov1)
+
+anova(model1, model4)
+summary.lm(aov1)
+
+# same p value:
+model1 <- lm(value ~ 1, dat)
+model2 <- lm(value ~ 1 + group, dat)
+anova(model1, model2)
+
+# A1 A2 B1 B2
+# dummy vars:
+# int  x1    x2    x3  meaning:
+# 1     0     0     0   A1
+# 1     1     0     0   A2
+# 1     0     1     0   B1
+# 1     0     0     1   B2
+# no interaction (treating as levels of same factor)
