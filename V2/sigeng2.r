@@ -109,8 +109,8 @@ analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-out
 class(analyses)
 analyses
 
-pvals <- aaply(1:10, 1, function(x) sim(analyses))
-mean(pvals < .05)
+pvals <- aaply(1:100, 1, function(x) sim(analyses))
+mean(pvals < .05) # 24%
 pvals
 
 # 23 % !!
