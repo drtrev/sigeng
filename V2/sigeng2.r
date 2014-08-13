@@ -26,25 +26,11 @@ rm(list=ls())
 # or 48 * 2 = 96 (not normal)
 
 library(ggplot2)
-library(lme4)
-library(plyr)
-library(ez)
-
-?expand.grid
-analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-outliers")),
-                        outliers=factor(c("classical1", "classical2", "boxplot", "robust")),
-                        outliers.notnormal=factor(c("boxplot", "robust")),
-                        outliers.response=factor(c("SD2", "remove")),
-                        normality=factor(c("KS", "shapiro-wilk")),
-                        analysis=factor(c("anova.type3", "lme")))
-# not using anova.type2 for now (just within subjects so when there's a removed outlier we have
-# to remove whole subject)
-class(analyses)
-analyses
 
 source("analyse.r")
 
 generate.dat <- function(N=30)
+  # kind of within subj's but may not have sphericity TODO
 {
   dat <- data.frame(id=factor(1:N), group=factor(c(rep(paste0("A", 1:2), each=N), rep(paste0("B", 1:2), each=N))), value=rnorm(N*4))
   # split group into separate factors
@@ -64,6 +50,7 @@ generate.dat.between <- function(N=30)
 }
 
 generate.dat.within <- function(N=30)
+  # within subjects data
 {
   idmeans <- data.frame(id=factor(1:N), idmean=rnorm(N))
   dat <- data.frame(id=factor(1:N), group=factor(c(rep(paste0("A", 1:2), each=N), rep(paste0("B", 1:2), each=N))))
@@ -93,8 +80,37 @@ sim <- function(analyses, N=30)
   min.p
 }
 
-pvals <- aaply(1:100, 1, function(x) sim(analyses))
-sum(pvals < .05)
+source("analyse.r")
+# just one for testing
+analyses.test <- expand.grid(diag.order=factor(c("outliers-normality")),
+                        outliers=factor(c("boxplot")),# "robust")),
+                        outliers.notnormal=factor(c("boxplot")), #, "robust")),
+                        outliers.response=factor(c("remove")),
+                        normality.func=factor(c("Shapiro-Wilk")),
+                        normality.on=factor(c("resids")),
+                        analysis=factor(c("anova.type3")))#, "lme")))
+
+#sim(analyses.test)
+dat <- generate.dat(100); out <- analyse(dat, analyses.test[1,])
+#
+
+# TODO does SD2 make sense when not normal? could have outliers.notnormal.response
+
+# diag=diagnostics
+analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-outliers")),
+                        outliers=factor(c("classical1", "classical2", "boxplot")),# "robust")),
+                        outliers.notnormal=factor(c("boxplot")), #, "robust")),
+                        outliers.response=factor(c("SD2", "remove")),
+                        normality.func=factor(c("KS", "Shapiro-Wilk")),
+                        normality.on=factor(c("groups", "resids")),
+                        analysis=factor(c("anova.type3")))#, "lme")))
+# not using anova.type2 for now (just within subjects so when there's a removed outlier we have
+# to remove whole subject)
+class(analyses)
+analyses
+
+pvals <- aaply(1:10, 1, function(x) sim(analyses))
+mean(pvals < .05)
 pvals
 
 # 23 % !!
@@ -106,61 +122,4 @@ pvals
 
 pvals.all <- c(pvals, pvals2)
 sum(pvals.all < .05)
-
-
-# What about normally:
-analyses.normal <- expand.grid(diag.order=factor("outliers-normality"),
-                        outliers=factor("classical1"),
-                        outliers.notnormal=factor("boxplot"),
-                        outliers.response=factor("SD2"),
-                        normality=factor("shapiro-wilk"),
-                        analysis=factor("anova.type3"))
-args(sim)
-
-pvals.normal <- aaply(1:100, 1, function(x) sim(analyses.normal))
-sum(pvals.normal < .05) # 14%
-
-just.anova <- function(dat)
-{
-  out <- ezANOVA(dat, dv=value, wid=id, within=.(factor1, factor2))
-  min(out$ANOVA$p)
-}
-
-pvals.just.anova <- aaply(1:100, 1, function(x) just.anova(generate.dat()))
-sum(pvals.just.anova < .05)
-
-pvals.just.anova <- aaply(1:100, 1, function(x) just.anova(generate.dat.within()))
-sum(pvals.just.anova < .05) # 14%
-
-pvals.just.anova <- aaply(1:1000, 1, function(x) just.anova(generate.dat.within()))
-sum(pvals.just.anova < .05) / 1000 # 13%
-
-# why is type I error above 5% for anova?
-
-just.anova.between <- function(dat)
-{
-  out <- ezANOVA(dat, dv=value, wid=id, between=.(factor1, factor2))
-  min(out$ANOVA$p)
-}
-
-pvals.just.anova <- aaply(1:100, 1, function(x) just.anova.between(generate.dat.between()))
-sum(pvals.just.anova < .05) # 12%
-
-
-generate.dat.between2 <- function(N=30)
-  # N is per group
-{
-  dat <- data.frame(id=factor(1:(N*2)), group=factor(c(rep("A", each=N), rep("B", each=N))), value=rnorm(N*2))
-  dat
-}
-
-just.anova.between2 <- function(dat)
-{
-  out <- ezANOVA(dat, dv=value, wid=id, between=group)
-  min(out$ANOVA$p)
-}
-
-pvals.just.anova <- aaply(1:100, 1, function(x) just.anova.between2(generate.dat.between2()))
-sum(pvals.just.anova < .05) # 5%
-length(pvals.just.anova)
 
