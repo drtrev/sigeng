@@ -25,6 +25,10 @@ rm(list=ls())
 # 48 * 3 = 144 (normal)
 # or 48 * 2 = 96 (not normal)
 
+###
+# TODO
+# covariate age, gender?
+
 library(ggplot2)
 
 source("analyse.r")
