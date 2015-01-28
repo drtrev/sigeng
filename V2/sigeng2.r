@@ -28,6 +28,7 @@ rm(list=ls())
 ###
 # TODO
 # covariate age, gender?
+# TODO regression adding params in different order?
 
 library(ggplot2)
 
