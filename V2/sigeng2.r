@@ -125,6 +125,8 @@ pvals
 
 # TODO order effect
 
+# TODO how much does each decision contribute to the false-positive rate?
+
 pvals.all <- c(pvals, pvals2)
 sum(pvals.all < .05)
 

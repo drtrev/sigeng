@@ -224,7 +224,8 @@ analyse <- function(dat, analysis)
 
   analysis.lme <- function(dat)
   {
-    # TODO could also nest factors wihtin ID see field example: participants/animal or something
+    # TODO could also nest factors wihtin ID see field example: participants/animal or something,
+    # although that seems dubious (full model?)
     lm1 <- lmer(value ~ 1 + (1|id), data=dat)
     lm2 <- lmer(value ~ factor1 + (1|id), data=dat)
     lm3 <- lmer(value ~ factor1 + factor2 + (1|id), data=dat)
