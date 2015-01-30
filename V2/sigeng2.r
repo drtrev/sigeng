@@ -100,6 +100,7 @@ dat <- generate.dat(100); out <- analyse(dat, analyses.test[1,])
 #
 
 # TODO does SD2 make sense when not normal? could have outliers.notnormal.response
+# but may be normal after outlier is transformed?
 
 # diag=diagnostics
 analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-outliers")),
@@ -108,13 +109,30 @@ analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-out
                         outliers.response=factor(c("SD2", "remove")),
                         normality.func=factor(c("KS", "Shapiro-Wilk")),
                         normality.on=factor(c("groups", "resids")),
-                        analysis=factor(c("anova.type3")))#, "lme")))
+                        analysis=factor(c("anova.type3", "lme")))
 # not using anova.type2 for now (just within subjects so when there's a removed outlier we have
 # to remove whole subject)
 class(analyses)
 analyses
 
-pvals <- aaply(1:100, 1, function(x) sim(analyses))
+#pvals <- aaply(1:100, 1, function(x) sim(analyses))
+# 1min 28 (88 seconds for 5 sims)
+# from analyses-timetest analyses
+#save(analyses, file="analyses-timetest.RData")
+#pvals <- aaply(1:5, 1, function(x) sim(analyses))
+?foreach
+library(foreach)
+library(parallel)
+library(multicore)
+library(snow)
+?parallel
+registerDoParallel()
+registerDoMC()
+registerDoSNOW()
+# from foreach package, useful when there are no varying arguments:
+times(2, .combine=c) %dopar%
+  sim(analyses)
+
 mean(pvals < .05) # 24%
 pvals
 
@@ -130,3 +148,30 @@ pvals
 pvals.all <- c(pvals, pvals2)
 sum(pvals.all < .05)
 
+nreps <- 2
+foreach(col=names(analyses)) %do%
+{
+  colcut <- analyses[,col]
+  out <- foreach(l=levels(colcut), .combine=data.frame) %do%
+  {
+    analyses.sub <- analyses[colcut==l,]
+    pvals <- foreach(i=1:nreps, .combine=data.frame) %dopar%
+      sim(analyses.sub)
+    pvals$nsig <- sum(pvals[1,] < 0.05)
+    pvals$colcut <- col
+    pvals$collevel <- l
+    pvals
+  }
+}
+
+names(analyses)
+f <- function(x)
+{
+  print(x)
+  key <- readline()
+  x
+}
+?readline
+col <- "outliers"
+ddply(analyses, col, f)
+f <- aaply(1:5, 1, function(x) sim(analyses))
