@@ -95,7 +95,7 @@ analyses.test <- expand.grid(diag.order=factor(c("outliers-normality")),
                         normality.on=factor(c("resids")),
                         analysis=factor(c("anova.type3")))#, "lme")))
 
-#sim(analyses.test)
+sim(analyses.test)
 dat <- generate.dat(100); out <- analyse(dat, analyses.test[1,])
 #
 
@@ -120,20 +120,19 @@ analyses
 # from analyses-timetest analyses
 #save(analyses, file="analyses-timetest.RData")
 #pvals <- aaply(1:5, 1, function(x) sim(analyses))
+#mean(pvals < .05) # 24%
+
 ?foreach
 library(foreach)
-library(parallel)
-library(multicore)
-library(snow)
+library(doParallel)
+#library(multicore)
+#library(snow)
 ?parallel
 registerDoParallel()
-registerDoMC()
-registerDoSNOW()
+#registerDoMC()
+#registerDoSNOW()
 # from foreach package, useful when there are no varying arguments:
-times(2, .combine=c) %dopar%
-  sim(analyses)
 
-mean(pvals < .05) # 24%
 pvals
 
 # 23 % !!
@@ -148,21 +147,24 @@ pvals
 pvals.all <- c(pvals, pvals2)
 sum(pvals.all < .05)
 
+col=names(analyses)[1] # test
+# I think dopar does not work because ddply uses parallel stuff?
+?ddply
 nreps <- 2
-foreach(col=names(analyses)) %do%
+system.time(foreach(col=names(analyses)) %do%
 {
   colcut <- analyses[,col]
   out <- foreach(l=levels(colcut), .combine=data.frame) %do%
   {
     analyses.sub <- analyses[colcut==l,]
-    pvals <- foreach(i=1:nreps, .combine=data.frame) %dopar%
+    pvals <- foreach(i=1:nreps, .combine=data.frame) %do%
       sim(analyses.sub)
     pvals$nsig <- sum(pvals[1,] < 0.05)
     pvals$colcut <- col
     pvals$collevel <- l
     pvals
   }
-}
+})
 
 names(analyses)
 f <- function(x)
