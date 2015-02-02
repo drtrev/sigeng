@@ -124,10 +124,10 @@ analyses
 
 ?foreach
 library(foreach)
-library(doParallel)
+#library(doParallel)
 #library(multicore)
 #library(snow)
-?parallel
+#?parallel
 registerDoParallel()
 #registerDoMC()
 #registerDoSNOW()
@@ -137,6 +137,8 @@ pvals
 
 # 23 % !!
 # TODO what about with tiny effect when generating data?
+
+# TODO generate data using built-in simulate() function!
 
 # TODO sphericity
 
@@ -150,21 +152,37 @@ sum(pvals.all < .05)
 col=names(analyses)[1] # test
 # I think dopar does not work because ddply uses parallel stuff?
 ?ddply
-nreps <- 2
-system.time(foreach(col=names(analyses)) %do%
+# aaply has error when .parallel=T
+sim.test <- function(x)
 {
-  colcut <- analyses[,col]
-  out <- foreach(l=levels(colcut), .combine=data.frame) %do%
+#  aaply(1:2, 1, print, .parallel=T)
+  pvals <- rnorm(1)
+}
+
+nreps <- 2
+foreach(colcurr=names(analyses)) %do%
+{
+  colcut <- analyses[,colcurr]
+  out <- foreach(l=levels(colcut), .combine=rbind) %do%
   {
     analyses.sub <- analyses[colcut==l,]
-    pvals <- foreach(i=1:nreps, .combine=data.frame) %do%
+    
+    system.time(
+    # may need to use .packages:
+    pvals <- foreach(i=1:nreps, .combine=data.frame) %dopar%
+    {
+#      library(lme4); library(ez)
+#      library(nortest); library(plyr)
+      #eval(sim(analyses.sub), envir=.GlobalEnv)
       sim(analyses.sub)
+    }
+    )
     pvals$nsig <- sum(pvals[1,] < 0.05)
     pvals$colcut <- col
     pvals$collevel <- l
     pvals
   }
-})
+}
 
 names(analyses)
 f <- function(x)
