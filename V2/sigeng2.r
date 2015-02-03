@@ -133,8 +133,6 @@ registerDoParallel()
 #registerDoSNOW()
 # from foreach package, useful when there are no varying arguments:
 
-pvals
-
 # 23 % !!
 # TODO what about with tiny effect when generating data?
 
@@ -146,43 +144,57 @@ pvals
 
 # TODO how much does each decision contribute to the false-positive rate?
 
-pvals.all <- c(pvals, pvals2)
-sum(pvals.all < .05)
-
-col=names(analyses)[1] # test
-# I think dopar does not work because ddply uses parallel stuff?
 ?ddply
-# aaply has error when .parallel=T
+# aaply has error when .parallel=T. maybe due to registerDoParallel setup?
 sim.test <- function(x)
 {
-#  aaply(1:2, 1, print, .parallel=T)
+  aaply(1:2, 1, print, .parallel=T)
   pvals <- rnorm(1)
 }
 
-nreps <- 2
-foreach(colcurr=names(analyses)) %do%
+sim.test(5)
+
+# may hang without registering a parallel backend, e.g. registerDoParallel()
+nreps <- 100
+system.time(
+out <- foreach(colcurr=names(analyses), .combine=rbind) %do%
 {
   colcut <- analyses[,colcurr]
-  out <- foreach(l=levels(colcut), .combine=rbind) %do%
+  if (length(levels(colcut))!=length(unique(colcut)))
+  {
+    warning("Factor levels have changed, refactoring")
+    colcut <- factor(colcut)
+  }
+  
+  foreach(l=levels(colcut), .combine=rbind) %do%
   {
     analyses.sub <- analyses[colcut==l,]
     
-    system.time(
-    # may need to use .packages:
+    # may need to use .packages or source/load.packages, seems to be needed after registerDoParallel
     pvals <- foreach(i=1:nreps, .combine=data.frame) %dopar%
-    {
-#      library(lme4); library(ez)
-#      library(nortest); library(plyr)
-      #eval(sim(analyses.sub), envir=.GlobalEnv)
-      sim(analyses.sub)
+    {  
+      load.packages()
+      pvals <- try(sim(analyses.sub))
+      if (class(pvals)=="try-error")
+      {
+        cat("Caught error\n")
+        pvals <- NA
+      }
+      pvals
     }
-    )
     pvals$nsig <- sum(pvals[1,] < 0.05)
-    pvals$colcut <- col
+    pvals$colcut <- colcurr
     pvals$collevel <- l
+    print(pvals)
     pvals
   }
 }
+)
+
+head(out)
+#save(out, file="out-holdEachLevel.RData")
+
+
 
 names(analyses)
 f <- function(x)

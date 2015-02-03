@@ -1,7 +1,10 @@
-library(lme4)
-library(ez)
-library(nortest)
-library(plyr)
+load.packages <- function()
+{
+  library(lme4)
+  library(ez)
+  library(nortest)
+  library(plyr)
+}
 
 analyse <- function(dat, analysis)
   # Given analysis id, do a specific analysis/order:
