@@ -144,16 +144,6 @@ registerDoParallel()
 
 # TODO how much does each decision contribute to the false-positive rate?
 
-?ddply
-# aaply has error when .parallel=T. maybe due to registerDoParallel setup?
-sim.test <- function(x)
-{
-  aaply(1:2, 1, print, .parallel=T)
-  pvals <- rnorm(1)
-}
-
-sim.test(5)
-
 # may hang without registering a parallel backend, e.g. registerDoParallel()
 nreps <- 100
 system.time(
@@ -189,21 +179,41 @@ out <- foreach(colcurr=names(analyses), .combine=rbind) %do%
     pvals
   }
 }
-)
+) # takes 2 hours
 
 head(out)
 #save(out, file="out-holdEachLevel.RData")
-
-
-
-names(analyses)
-f <- function(x)
+#save(analyses, file="out-holdEachLevelAnalyses.RData") # save associated analyses data frame
+nrow(out)
+# what range of results do we expect anyway?
+out.all <- foreach(j=1:nrow(out), .combine=rbind) %do%
 {
-  print(x)
-  key <- readline()
-  x
+  pvals <- foreach(i=1:nreps, .combine=data.frame) %dopar%
+  {  
+    load.packages()
+    pvals <- try(sim(analyses.sub))
+    if (class(pvals)=="try-error")
+    {
+      cat("Caught error\n")
+      pvals <- NA
+    }
+    pvals
+  }
+  pvals$nsig <- sum(pvals[1,] < 0.05)
+  print(pvals)
+  pvals
 }
-?readline
-col <- "outliers"
-ddply(analyses, col, f)
-f <- aaply(1:5, 1, function(x) sim(analyses))
+out.all
+#save(out.all, file="out-all.RData")
+#save(analyses, file="out-allAnalyses.RData")
+
+# 26 +- 7 covers most of the data
+#qplot(out.all$nsig)
+#mean(out.all$nsig) # == 25.6
+#sd(out.all$nsig) * 2 # == 6.7
+#qplot(out$nsig)
+
+# I think KS is the only one that might be above chance.
+out[order(out$nsig),]
+
+f <- aaply(.data=1:5, .margins=1, .fun=function(x) {print(x); x}, .parallel=T)
