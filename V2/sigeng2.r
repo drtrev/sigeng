@@ -29,6 +29,7 @@ rm(list=ls())
 # TODO
 # covariate age, gender?
 # TODO regression adding params in different order?
+# TODO investigate R simulate function which allows you to simulate based on an aov model.
 
 library(ggplot2)
 
