@@ -343,3 +343,41 @@ test.normal.anova <- function()
   length(pvals.just.anova)
   
 }
+
+##################################################
+# Check whether generating data produces sphericity
+##################################################
+
+checkSphericity <- function(N=30)
+{
+  source("generateData.r")
+  
+  dat <- generate.dat(N)
+  #head(dat)
+  #args(ezANOVA)  
+  ezANOVA(dat, dv=value, within=.(factor1, factor2), wid=id)
+  # Cannot fail to have sphericity with only two levels per factor.
+  # But there are still two ways of generating data: with or without
+  # participant id means.
+}
+
+##################################################
+# Simulate: run through analyses
+##################################################
+
+sim <- function(analyses, N=30)
+{
+  dat <- generate.dat.within(N)
+  
+  out <- NULL
+  for (i in 1:nrow(analyses))
+  {
+    temp <- analyse(dat, analyses[i,])
+    out <- rbind(out, temp$analysis)
+  }
+  #out
+  #head(out)
+  
+  min.p <- min(c(min(out$factor1.pval), min(out$factor2.pval), min(out$factor1.2.pval)))
+  min.p
+}
