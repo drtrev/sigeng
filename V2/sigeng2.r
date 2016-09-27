@@ -67,8 +67,13 @@ out$analysis
 
 source("investigate.r")
 out.all <- investigateRepeatAll(remake=F)
+debugonce(investigateRepeatAll)
+out.all <- investigateRepeatAll(remake=T, nreps=2, analyses=analyses.test)
+head(out.all)
 
-analyses <- ini
+#debugonce(investigateHoldEachLevel)
+out.holdEachLevel <- investigateHoldEachLevel(remake=T, nreps=2, analyses=analyses.test)
+head(out.holdEachLevel)
 
 # diag=diagnostics
 analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-outliers")),

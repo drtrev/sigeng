@@ -373,6 +373,7 @@ sim <- function(analyses, N=30)
   for (i in 1:nrow(analyses))
   {
     temp <- analyse(dat, analyses[i,])
+    print(temp)
     out <- rbind(out, temp$analysis)
   }
   #out

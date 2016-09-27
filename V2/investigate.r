@@ -11,6 +11,33 @@ registerDoParallel(cl)
 #getDoParWorkers()
 
 ############################################################
+# Helper functions
+############################################################
+
+getOutputFileName <- function(filePrefix=NULL)
+{
+  # Param:
+  #   filePrefix - some kind of prefix name to give to the file,
+  #     e.g. out-all, out-holdEachLevel
+  if (is.null(filePrefix))
+  {
+    stop("Specify file prefix")
+  }
+  fileNumber <- 1
+  fileSuffix <- ".RData"
+  analysesSuffix <- "Analyses" # for the analyses data frame
+  while (file.exists(paste0(filePrefix, fileNumber, fileSuffix)))
+  {
+    fileNumber <- fileNumber + 1
+  }
+  cat("fileNumber:", fileNumber, "\n")
+  
+  resultsFileName <- paste0(filePrefix, fileNumber, fileSuffix)
+  analysesFileName <- paste0(filePrefix, analysesSuffix, fileNumber, fileSuffix)
+  list(resultsFileName=resultsFileName, analysesFileName=analysesFileName)
+}
+
+############################################################
 # Create a set of analyses for use in investigations
 ############################################################
 
@@ -37,7 +64,7 @@ initAnalyses <- function()
 # See parallelDemo.r
 holdEachLevel <- function(analyses, nreps)
 {
-  system.time(
+#  system.time(
     out <- foreach(colcurr=names(analyses), .combine=rbind) %do%
     {
       colcut <- analyses[,colcurr]
@@ -54,6 +81,7 @@ holdEachLevel <- function(analyses, nreps)
         # may need to use .packages or source/load.packages, seems to be needed after registerDoParallel
         pvals <- foreach(i=1:nreps, .combine=data.frame) %dopar%
         {  
+          source("analyse.r")
           load.packages()
           pvals <- try(sim(analyses.sub))
           if (class(pvals)=="try-error")
@@ -76,7 +104,7 @@ holdEachLevel <- function(analyses, nreps)
         pvals
       }
   }
-  ) # takes 2 hours
+#  ) # takes 2 hours
   
   # out looks like this:
   #         result.1     result.2 ... nsig             colcut           collevel
@@ -89,19 +117,30 @@ holdEachLevel <- function(analyses, nreps)
 
 ############################################################
 
-investigateHoldEachLevel <- function(remake=F)
+investigateHoldEachLevel <- function(remake=F, nreps=100, analyses=NULL)
 {
-  analyses <- initAnalyses()  
-  nreps <- 100
-
   if (remake)
   {
-    out <- holdEachLevel(analyses, nreps)
-    save(out, file="out-holdEachLevel.RData")
-    save(analyses, file="out-holdEachLevelAnalyses.RData") # save associated analyses data frame
+    if (is.null(analyses))
+    {
+      cat("Using default analyses\n")
+      analyses <- initAnalyses()
+    }
+    out.holdEachLevel <- holdEachLevel(analyses, nreps)
+    fileNames <- getOutputFileName("out-holdEachLevel")
+    cat("resultsFileName:", fileNames$resultsFileName, "\n")
+    cat("analysesFileName:", fileNames$analysesFileName, "\n")
+    
+    save(out.holdEachLevel, file=fileNames$resultsFileName)
+    save(analyses, file=fileNames$analysesFileName) # save associated analyses data frame
   }
-  load("out-holdEachLevel.RData")
-  out
+  else
+  {
+    # TODO use file number
+    load("out-holdEachLevel.RData")
+    load("out-holdEachLevelAnalyses.RData")
+  }
+  out <- list(holdEachLevel=out.holdEachLevel, analyses=analyses)
 }
 
 ############################################################
@@ -116,7 +155,7 @@ repeatAll <- function(analyses, out, nreps)
   #   but with source("analyse.r") and load.packages() in the inner loop.
   # 445 seconds same but with source and load.packages in outer loop.
   # TODO What's the SD on time measurements?
-  system.time(out.all <- foreach(j=1:nrow(out), .combine=rbind) %dopar%
+  system.time(out.all <- foreach(j=1:nrow(out), .combine=rbind) %do%
   {
     library(foreach)    
     # The following (inner) foreach loop took:
@@ -144,17 +183,26 @@ repeatAll <- function(analyses, out, nreps)
 
 ############################################################
 
-investigateRepeatAll <- function(remake=F)
+investigateRepeatAll <- function(remake=F, nreps=100, analyses=NULL)
 {
-  out <- investigateHoldEachLevel(remake=F)
-  # ensure we use the same analyses setup:
-  load("out-holdEachLevelAnalyses.RData")
-  
   if (remake)
   {
-    out.all <- repeatAll(analyses, out, nreps)
-    save(out.all, file="out-all.RData")
-    save(analyses, file="out-allAnalyses.RData")
+    # TODO make this work with fileNumber
+    out <- investigateHoldEachLevel(remake=F)
+    out.holdEachLevel <- out$holdEachLevel
+    out.analyses <- analyses
+    if (is.null(analyses))
+    {
+      out.analyses <- out$analyses
+    }
+    
+    out.all <- repeatAll(out.analyses, out.holdEachLevel, nreps)
+    fileNames <- getOutputFileName("out-all")
+    cat("resultsFileName:", fileNames$resultsFileName, "\n")
+    cat("analysesFileName:", fileNames$analysesFileName, "\n")
+    
+    save(out.all, file=fileNames$resultsFileName)
+    save(analyses, file=fileNames$analysesFileName)
   }
   else
   {

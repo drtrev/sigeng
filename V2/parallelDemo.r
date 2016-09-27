@@ -61,3 +61,32 @@ system.time(out <- foreach(j=1:10, .combine=cbind, .packages="foreach") %:%
 
 # If the inner loop tasks are small, then you might want to execute the inner loop as a single task
 # (to save time forking). In this case see nested.pdf vignette and look at doNWS (chunking).
+
+
+#####
+# trying to work out why dopar is not working in sigeng V2
+
+source("analyse.r")
+system.time(out <- foreach(j=1:10, .combine=cbind, .packages="foreach") %do% # dopar
+{
+  foreach(j=1:10, .combine=data.frame) %do%
+  {
+    source("analyse.r")
+    load.packages()
+    
+    analyses <- initAnalyses()
+    analyses <- analyses[1:2,]
+    
+    pvals <- try(sim(analyses))
+    print(pvals) # <<---- pvals returns $dat and $analysis,
+    # not sure where nsig comes in!!
+    if (class(pvals)=="try-error")
+    {
+      cat("Caught error\n")
+      pvals <- NA
+    }
+    pvals
+  }
+})
+
+out
