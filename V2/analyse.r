@@ -373,12 +373,11 @@ sim <- function(analyses, N=30)
   for (i in 1:nrow(analyses))
   {
     temp <- analyse(dat, analyses[i,])
-    print(temp)
     out <- rbind(out, temp$analysis)
   }
   #out
   #head(out)
-  
+
   min.p <- min(c(min(out$factor1.pval), min(out$factor2.pval), min(out$factor1.2.pval)))
   min.p
 }

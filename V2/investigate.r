@@ -2,39 +2,117 @@
 # Investigate: Run analyses to answer questions
 ############################################################
 
-library(foreach)
-library(doParallel)
-# cran.r-project.org/web/packages/doParallel/vignettes/gettingstartedParallel.pdf
-cl <- makeCluster(2)
-registerDoParallel(cl)
-#check we have 2:
-#getDoParWorkers()
+initializeCluster <- function()
+{
+  library(foreach)
+  library(doParallel)
+  # cran.r-project.org/web/packages/doParallel/vignettes/gettingstartedParallel.pdf
+  cluster <- makeCluster(2)
+  registerDoParallel(cluster)
+  # Check we have 2:
+  stopifnot(getDoParWorkers()==2)
+  
+  cluster
+}
+
+killCluster <- function(cluster)
+{
+  # If you forget to call this, the cluster processes will terminate themselves when
+  # the master R session's process ends.
+  stopCluster(cl)
+}
 
 ############################################################
 # Helper functions
 ############################################################
 
-getOutputFileName <- function(filePrefix=NULL)
+getOutputFileNames <- function(filePrefix=NULL, path="results")
 {
   # Param:
-  #   filePrefix - some kind of prefix name to give to the file,
-  #     e.g. out-all, out-holdEachLevel
+  #   filePrefix   some kind of prefix name to give to the file,
+  #                e.g. holdEachLevel
+  #   path         path to results output folder
+
   if (is.null(filePrefix))
   {
     stop("Specify file prefix")
   }
+
+  # Three output files.
+  # (1) Results file (containing p values from every run, nsig columns, and 
+  #     info specific to each row e.g. levels held)
+  # (2) Analyses file (containing the "analyses" data frame, i.e. the different combinations
+  #     of possible analyses to carry out on the data).
+  # (3) Meta info file (containing extra information about the simulation, e.g. running time).
+  
+  getResultsFileName <- function(path, filePrefix, fileNumber, fileSuffix)
+  {
+    paste0(path, "/", filePrefix, fileNumber, fileSuffix)
+  }
+  
+  getAnalysesFileName <- function(path, filePrefix, analysesSuffix, fileNumber, fileSuffix)
+  {
+    paste0(path, "/", filePrefix, analysesSuffix, fileNumber, fileSuffix)
+  }
+  
+  getMetaInfoFileName <- function(path, filePrefix, metaInfoSuffix, fileNumber, fileSuffix)
+  {
+    paste0(path, "/", filePrefix, metaInfoSuffix, fileNumber, fileSuffix)
+  }
+  
+  getFileNames <- function(path,
+                           filePrefix,
+                           analysesSuffix,
+                           metaInfoSuffix,
+                           fileNumber,
+                           fileSuffix)
+  {
+    resultsFileName <- getResultsFileName(path, filePrefix, fileNumber, fileSuffix)
+    analysesFileName <- getAnalysesFileName(path, filePrefix, analysesSuffix, fileNumber, fileSuffix)
+    metaInfoFileName <- getMetaInfoFileName(path, filePrefix, metaInfoSuffix, fileNumber, fileSuffix)
+    
+    list(resultsFileName=resultsFileName,
+         analysesFileName=analysesFileName,
+         metaInfoFileName=metaInfoFileName)
+  }
+  
+  filesExist <- function(fileNames)
+  {
+    foundFile <- F
+    filesExistLogicalVector <- do.call(file.exists, fileNames)
+    if (any(filesExistLogicalVector))
+    {
+      foundFile <- T
+    }
+    foundFile
+  }
+  
   fileNumber <- 1
   fileSuffix <- ".RData"
   analysesSuffix <- "Analyses" # for the analyses data frame
-  while (file.exists(paste0(filePrefix, fileNumber, fileSuffix)))
+  metaInfoSuffix <- "MetaInfo" # for meta info, e.g. processingTime, cpu info.
+  
+  while (
+    filesExist(
+      getFileNames(path,
+                   filePrefix,
+                   analysesSuffix,
+                   metaInfoSuffix,
+                   fileNumber,
+                   fileSuffix)
+    )
+  )
   {
     fileNumber <- fileNumber + 1
   }
   cat("fileNumber:", fileNumber, "\n")
   
-  resultsFileName <- paste0(filePrefix, fileNumber, fileSuffix)
-  analysesFileName <- paste0(filePrefix, analysesSuffix, fileNumber, fileSuffix)
-  list(resultsFileName=resultsFileName, analysesFileName=analysesFileName)
+  getFileNames(path,
+               filePrefix,
+               analysesSuffix,
+               metaInfoSuffix,
+               fileNumber,
+               fileSuffix)
 }
 
 ############################################################
@@ -64,55 +142,66 @@ initAnalyses <- function()
 # See parallelDemo.r
 holdEachLevel <- function(analyses, nreps)
 {
-#  system.time(
-    out <- foreach(colcurr=names(analyses), .combine=rbind) %do%
+  processingTime <- system.time(
+    results <- foreach(colcurr=names(analyses), .combine=rbind) %do%
     {
       colcut <- analyses[,colcurr]
       if (length(levels(colcut))!=length(unique(colcut)))
       {
+        # This should only happen if analyses was cut,
+        # e.g. initAnalyses()[1:2,]
         warning("Factor levels have changed, refactoring")
         colcut <- factor(colcut)
       }
       
-      foreach(l=levels(colcut), .combine=rbind) %do%
+      pvalDataFrame <- foreach(l=levels(colcut), .combine=rbind) %do%
       {
         analyses.sub <- analyses[colcut==l,]
         
         # may need to use .packages or source/load.packages, seems to be needed after registerDoParallel
-        pvals <- foreach(i=1:nreps, .combine=data.frame) %dopar%
-        {  
+        pvalRow <- foreach(i=1:nreps, .combine=data.frame) %dopar%
+        {
+          source("generateData.r")
           source("analyse.r")
           load.packages()
-          pvals <- try(sim(analyses.sub))
-          if (class(pvals)=="try-error")
+          cat("nreps: ", nreps, "\n")
+          # sim returns a single p value, the minimum of the two main effects and interaction.
+          pval <- try(sim(analyses.sub))
+          if (class(pval)=="try-error")
           {
             cat("Caught error\n")
-            pvals <- NA
+            warning("Caught error")
+            # Do not overwrite pval because it contains error
+            #pval <- NA
           }
-          pvals
+          pval
         }
-        # pvals looks like this:
+        # pvalRow looks like this (combined into a data frame via foreach):
         #    result.1  result.2
         #  1   xxxxxx     xxxxx
+        stopifnot(nrow(pvalRow)==1)
         # Add a column showing the total number of significant values from the row:
-        pvals$nsig <- sum(pvals[1,] < 0.05)
+        pvalRow$nsig <- sum(pvalRow[1,] < 0.05)
         # Add the name of the column we are currently varying:
-        pvals$colcut <- colcurr
+        pvalRow$colcut <- colcurr
         # Add the factor level of colcurr we just used:
-        pvals$collevel <- l
-        print(pvals)
-        pvals
+        pvalRow$collevel <- l
+        print(pvalRow)
+        pvalRow
       }
-  }
-#  ) # takes 2 hours
+      
+      pvalDataFrame
+    }
+  ) # takes 2 hours
   
-  # out looks like this:
+  # results looks like this:
   #         result.1     result.2 ... nsig             colcut           collevel
   #   1  0.064134139 0.0236179504 ...    1         diag.order normality-outliers
   #   2  0.284763115 0.0755375576 ...    0         diag.order outliers-normality
   #   3  0.106062614 0.1656168818 ...    0           outliers            boxplot
   #   4  ...
-  out
+  metaInfo <- list(procesingTime=processingTime)
+  list(results=results, analyses=analyses, metaInfo=metaInfo)
 }
 
 ############################################################
@@ -126,21 +215,29 @@ investigateHoldEachLevel <- function(remake=F, nreps=100, analyses=NULL)
       cat("Using default analyses\n")
       analyses <- initAnalyses()
     }
-    out.holdEachLevel <- holdEachLevel(analyses, nreps)
-    fileNames <- getOutputFileName("out-holdEachLevel")
+    # Get file names ready first in case there is a problem.
+    fileNames <- getOutputFileNames("holdEachLevel")
     cat("resultsFileName:", fileNames$resultsFileName, "\n")
     cat("analysesFileName:", fileNames$analysesFileName, "\n")
+    cat("metaInfoFileName:", fileNames$metaInfoFileName, "\n")
+
+    holdEachLevelList <- holdEachLevel(analyses, nreps)
+    holdEachLevelResults <- holdEachLevelList$results
+    holdEachLevelAnalyses <- holdEachLevelList$analyses
+    holdEachLevelMetaInfo <- holdEachLevelList$metaInfo
     
-    save(out.holdEachLevel, file=fileNames$resultsFileName)
-    save(analyses, file=fileNames$analysesFileName) # save associated analyses data frame
+    save(holdEachLevelResults, file=fileNames$resultsFileName)
+    save(holdEachLevelAnalyses, file=fileNames$analysesFileName)
+    save(holdEachLevelMetaInfo, file=fileNames$metaInfoFileName)
   }
   else
   {
     # TODO use file number
+    stop("remake==T not yet implemented")
     load("out-holdEachLevel.RData")
     load("out-holdEachLevelAnalyses.RData")
   }
-  out <- list(holdEachLevel=out.holdEachLevel, analyses=analyses)
+  holdEachLevelList
 }
 
 ############################################################
@@ -163,6 +260,7 @@ repeatAll <- function(analyses, out, nreps)
     # 53 seconds for 3 reps, not parallel
     pvals <- foreach(i=1:nreps, .combine=data.frame) %do%
     {
+      source("genderateData.r")
       source("analyse.r")
       load.packages()
       
@@ -188,6 +286,7 @@ investigateRepeatAll <- function(remake=F, nreps=100, analyses=NULL)
   if (remake)
   {
     # TODO make this work with fileNumber
+    stop("check this function works")
     out <- investigateHoldEachLevel(remake=F)
     out.holdEachLevel <- out$holdEachLevel
     out.analyses <- analyses

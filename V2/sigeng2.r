@@ -46,9 +46,10 @@ rm(list=ls())
 
 library(ggplot2)
 
-source("generateData.r")
 source("analyse.r")
-
+source("generateData.r")
+source("investigate.r")
+cluster <- initializeCluster()
 load.packages()
 
 # just one for testing
@@ -60,19 +61,26 @@ analyses.test <- expand.grid(diag.order=factor(c("outliers-normality")),
                         normality.on=factor(c("resids")),
                         analysis=factor(c("anova.type3")))#, "lme")))
 
-sim(analyses.test)
-dat <- generate.dat.within(100); out <- analyse(dat, analyses.test[1,])
+temp <- sim(analyses.test)
+
+dat <- generate.dat.within(100);
+out <- analyse(dat, analyses.test[1,])
 out$analysis
+out$dat
+
+rm(temp)
 #
 
 source("investigate.r")
 out.all <- investigateRepeatAll(remake=F)
-debugonce(investigateRepeatAll)
+#debugonce(investigateRepeatAll)
 out.all <- investigateRepeatAll(remake=T, nreps=2, analyses=analyses.test)
 head(out.all)
 
 #debugonce(investigateHoldEachLevel)
+debugonce(investigateHoldEachLevel)
 out.holdEachLevel <- investigateHoldEachLevel(remake=T, nreps=2, analyses=analyses.test)
+out.holdEachLevel <- investigateHoldEachLevel(remake=T)
 head(out.holdEachLevel)
 
 # diag=diagnostics
@@ -87,6 +95,8 @@ analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-out
 # to remove whole subject)
 class(analyses)
 analyses
+
+killCluster(cluster)
 
 #pvals <- aaply(1:100, 1, function(x) sim(analyses))
 # 1min 28 (88 seconds for 5 sims)

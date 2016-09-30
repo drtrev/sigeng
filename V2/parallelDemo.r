@@ -69,7 +69,7 @@ system.time(out <- foreach(j=1:10, .combine=cbind, .packages="foreach") %:%
 source("analyse.r")
 system.time(out <- foreach(j=1:10, .combine=cbind, .packages="foreach") %do% # dopar
 {
-  foreach(j=1:10, .combine=data.frame) %do%
+  pvals <- foreach(j=1:10, .combine=data.frame) %dopar%
   {
     source("analyse.r")
     load.packages()
@@ -78,8 +78,10 @@ system.time(out <- foreach(j=1:10, .combine=cbind, .packages="foreach") %do% # d
     analyses <- analyses[1:2,]
     
     pvals <- try(sim(analyses))
-    print(pvals) # <<---- pvals returns $dat and $analysis,
-    # not sure where nsig comes in!!
+    cat("About to print pvals:----\n")
+    print(pvals) 
+    cat("----Printed pvals\n")
+    
     if (class(pvals)=="try-error")
     {
       cat("Caught error\n")
@@ -87,6 +89,66 @@ system.time(out <- foreach(j=1:10, .combine=cbind, .packages="foreach") %do% # d
     }
     pvals
   }
+  # returns:
+  #   result.1  result.2 result.3 ...
+  # 1 0.477461 0.1759253  0.17853 ...
+  pvals
+  pvals$nsig <- sum(pvals[1,] < 0.05)
+  # Add the name of the column we are currently varying:
+  #pvals$colcut <- colcurr
+  # Add the factor level of colcurr we just used:
+  #pvals$collevel <- l
+  pvals
 })
 
 out
+
+##
+# It seems it does not work when it's in a function.
+# Could be something to do with environments
+test <- function()
+{
+  source("investigate.r")
+  source("analyse.r")
+  load.packages()
+  a <- 1
+  print(ls())
+
+  pvalRow <- foreach(j=1:10, .combine=data.frame,
+                     .export=c("initAnalyses", "load.packages", "sim", "generate.dat.within")) %dopar%
+  {
+    print(getwd())
+    source("investigate.r")
+    source("analyse.r")
+    #source("generateData.r")
+    load.packages()
+    
+    analyses <- initAnalyses()
+    analyses <- analyses[1:2,]
+    
+    pval <- try(sim(analyses))
+    cat("About to print pvals:----\n")
+    print(pval)
+    cat("----Printed pvals\n")
+    
+    if (class(pval)=="try-error")
+    {
+      cat("Caught error\n")
+      # Don't overwrite pval because it contains the error
+      # Problem was generateData.r was not loaded,
+      # and it couldn't find generate.dat.within
+      # Need to either source("generateData.r")
+      # or add generate.dat.within to the .export param of foreach.
+      #pval <- 5
+    }
+    pval
+  }
+  print("-------")
+  print(pvalRow)
+  print("-------")
+  
+}
+
+a <- test()
+?foreach
+
