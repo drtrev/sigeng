@@ -19,7 +19,7 @@ killCluster <- function(cluster)
 {
   # If you forget to call this, the cluster processes will terminate themselves when
   # the master R session's process ends.
-  stopCluster(cl)
+  stopCluster(cluster)
 }
 
 ############################################################
@@ -83,39 +83,47 @@ initAnalyses <- function()
 # If you get an error with %do% when running parallel, you
 # need to include the foreach package within the loop or use
 # .packages="foreach" as a parameter to foreach().
+# See also .export param for function names.
 # See parallelDemo.r
 holdEachLevel <- function(analyses, nreps)
 {
+  # Here we run through all the combinations of analyses.
+  # But we do so by "holding" one level at a time.
+  # This allows us to see if, e.g., the diagnostic order makes a
+  # difference in the probability of finding a significant result.
   processingTime <- system.time(
-    results <- foreach(colcurr=names(analyses), .combine=rbind) %do%
+    results <- foreach(currentColumnName=names(analyses), .combine=rbind) %do%
     {
-      colcut <- analyses[,colcurr]
-      if (length(levels(colcut))!=length(unique(colcut)))
+      currentColumn <- analyses[,currentColumnName]
+      if (length(levels(currentColumn))!=length(unique(currentColumn)))
       {
         # This should only happen if analyses was cut,
         # e.g. initAnalyses()[1:2,]
         warning("Factor levels have changed, refactoring")
-        colcut <- factor(colcut)
+        currentColumn <- factor(currentColumn)
       }
       
-      pvalDataFrame <- foreach(l=levels(colcut), .combine=rbind) %do%
+      pvalDataFrame <- foreach(currentLevel=levels(currentColumn), .combine=rbind) %do%
       {
-        analyses.sub <- analyses[colcut==l,]
+        analysesWithOneLevelHeld <- analyses[currentColumn==currentLevel,]
         
-        # may need to use .packages or source/load.packages, seems to be needed after registerDoParallel
+        # may need to use .packages or source/load.packages, seems to be needed after
+        # registerDoParallel. An alternative is to use the .export param of foreach.
+        # See parallelDemo.r
         pvalRow <- foreach(i=1:nreps, .combine=data.frame) %dopar%
         {
           source("generateData.r")
           source("analyse.r")
           load.packages()
-          cat("nreps: ", nreps, "\n")
+
           # sim returns a single p value, the minimum of the two main effects and interaction.
-          pval <- try(sim(analyses.sub))
+          pval <- try(sim(analysesWithOneLevelHeld))
           if (class(pval)=="try-error")
           {
             cat("Caught error\n")
             warning("Caught error")
-            # Do not overwrite pval because it contains error
+            # pval contains error info.
+            # Either use this information, or overwrite with NA.
             #pval <- NA
           }
           pval
@@ -125,25 +133,34 @@ holdEachLevel <- function(analyses, nreps)
         #  1   xxxxxx     xxxxx
         stopifnot(nrow(pvalRow)==1)
         # Add a column showing the total number of significant values from the row:
-        pvalRow$nsig <- sum(pvalRow[1,] < 0.05)
+        pvalRow$nSig <- sum(pvalRow[1,] < 0.05)
         # Add the name of the column we are currently varying:
-        pvalRow$colcut <- colcurr
-        # Add the factor level of colcurr we just used:
-        pvalRow$collevel <- l
-        print(pvalRow)
+        pvalRow$columnName <- currentColumnName
+        # Add the factor level of current column we just used:
+        pvalRow$columnLevel <- currentLevel
         pvalRow
       }
+      # pvalDataFrame rbinds all the levels of the analyses column we are currently working on.
       
       pvalDataFrame
     }
   ) # takes 2 hours
+
+  # results is an rbind of all the pvalDataFrames, one for each column in analyses.
   
-  # results looks like this:
-  #         result.1     result.2 ... nsig             colcut           collevel
+  # i.e. results looks like this:
+  #         result.1     result.2 ... nSig      currentColumn       currentLevel
   #   1  0.064134139 0.0236179504 ...    1         diag.order normality-outliers
   #   2  0.284763115 0.0755375576 ...    0         diag.order outliers-normality
   #   3  0.106062614 0.1656168818 ...    0           outliers            boxplot
   #   4  ...
+  interestingCols <- c("nSig", "columnName", "columnLevel")
+  cat("----------\n")
+  cat("nreps:", nreps, "\n")
+  cat("ncol(results):", ncol(results), "\n")
+  print(results[interestingCols])
+  cat("----------\n")
+  
   metaInfo <- list(procesingTime=processingTime)
   list(results=results, analyses=analyses, metaInfo=metaInfo)
 }
