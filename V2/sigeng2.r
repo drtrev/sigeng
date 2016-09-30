@@ -78,7 +78,6 @@ out.all <- investigateRepeatAll(remake=T, nreps=2, analyses=analyses.test)
 head(out.all)
 
 #debugonce(investigateHoldEachLevel)
-debugonce(investigateHoldEachLevel)
 out.holdEachLevel <- investigateHoldEachLevel(remake=T, nreps=2, analyses=analyses.test)
 out.holdEachLevel <- investigateHoldEachLevel(remake=T)
 head(out.holdEachLevel)

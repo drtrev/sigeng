@@ -26,7 +26,7 @@ killCluster <- function(cluster)
 # Helper functions
 ############################################################
 
-getOutputFileNames <- function(filePrefix=NULL, path="results")
+getOutputFileName <- function(filePrefix=NULL, path="results")
 {
   # Param:
   #   filePrefix   some kind of prefix name to give to the file,
@@ -38,68 +38,17 @@ getOutputFileNames <- function(filePrefix=NULL, path="results")
     stop("Specify file prefix")
   }
 
-  # Three output files.
-  # (1) Results file (containing p values from every run, nsig columns, and 
-  #     info specific to each row e.g. levels held)
-  # (2) Analyses file (containing the "analyses" data frame, i.e. the different combinations
-  #     of possible analyses to carry out on the data).
-  # (3) Meta info file (containing extra information about the simulation, e.g. running time).
-  
   getResultsFileName <- function(path, filePrefix, fileNumber, fileSuffix)
   {
     paste0(path, "/", filePrefix, fileNumber, fileSuffix)
   }
   
-  getAnalysesFileName <- function(path, filePrefix, analysesSuffix, fileNumber, fileSuffix)
-  {
-    paste0(path, "/", filePrefix, analysesSuffix, fileNumber, fileSuffix)
-  }
-  
-  getMetaInfoFileName <- function(path, filePrefix, metaInfoSuffix, fileNumber, fileSuffix)
-  {
-    paste0(path, "/", filePrefix, metaInfoSuffix, fileNumber, fileSuffix)
-  }
-  
-  getFileNames <- function(path,
-                           filePrefix,
-                           analysesSuffix,
-                           metaInfoSuffix,
-                           fileNumber,
-                           fileSuffix)
-  {
-    resultsFileName <- getResultsFileName(path, filePrefix, fileNumber, fileSuffix)
-    analysesFileName <- getAnalysesFileName(path, filePrefix, analysesSuffix, fileNumber, fileSuffix)
-    metaInfoFileName <- getMetaInfoFileName(path, filePrefix, metaInfoSuffix, fileNumber, fileSuffix)
-    
-    list(resultsFileName=resultsFileName,
-         analysesFileName=analysesFileName,
-         metaInfoFileName=metaInfoFileName)
-  }
-  
-  filesExist <- function(fileNames)
-  {
-    foundFile <- F
-    filesExistLogicalVector <- do.call(file.exists, fileNames)
-    if (any(filesExistLogicalVector))
-    {
-      foundFile <- T
-    }
-    foundFile
-  }
-  
   fileNumber <- 1
   fileSuffix <- ".RData"
-  analysesSuffix <- "Analyses" # for the analyses data frame
-  metaInfoSuffix <- "MetaInfo" # for meta info, e.g. processingTime, cpu info.
-  
+
   while (
-    filesExist(
-      getFileNames(path,
-                   filePrefix,
-                   analysesSuffix,
-                   metaInfoSuffix,
-                   fileNumber,
-                   fileSuffix)
+    file.exists(
+      getResultsFileName(path, filePrefix, fileNumber, fileSuffix)
     )
   )
   {
@@ -107,12 +56,7 @@ getOutputFileNames <- function(filePrefix=NULL, path="results")
   }
   cat("fileNumber:", fileNumber, "\n")
   
-  getFileNames(path,
-               filePrefix,
-               analysesSuffix,
-               metaInfoSuffix,
-               fileNumber,
-               fileSuffix)
+  getResultsFileName(path, filePrefix, fileNumber, fileSuffix)
 }
 
 ############################################################
@@ -215,20 +159,13 @@ investigateHoldEachLevel <- function(remake=F, nreps=100, analyses=NULL)
       cat("Using default analyses\n")
       analyses <- initAnalyses()
     }
-    # Get file names ready first in case there is a problem.
-    fileNames <- getOutputFileNames("holdEachLevel")
-    cat("resultsFileName:", fileNames$resultsFileName, "\n")
-    cat("analysesFileName:", fileNames$analysesFileName, "\n")
-    cat("metaInfoFileName:", fileNames$metaInfoFileName, "\n")
+    
+    # Get file name ready first in case there is a problem.
+    outputFileName <- getOutputFileName("holdEachLevelList")
 
     holdEachLevelList <- holdEachLevel(analyses, nreps)
-    holdEachLevelResults <- holdEachLevelList$results
-    holdEachLevelAnalyses <- holdEachLevelList$analyses
-    holdEachLevelMetaInfo <- holdEachLevelList$metaInfo
-    
-    save(holdEachLevelResults, file=fileNames$resultsFileName)
-    save(holdEachLevelAnalyses, file=fileNames$analysesFileName)
-    save(holdEachLevelMetaInfo, file=fileNames$metaInfoFileName)
+
+    save(holdEachLevelList, file=outputFileName)
   }
   else
   {
