@@ -46,12 +46,12 @@ rm(list=ls())
 
 library(ggplot2)
 
-source("analyse.r")
 source("generateData.r")
+source("analyse.r")
 source("investigate.r")
-cluster <- initializeCluster()
 load.packages()
 
+##########
 # just one for testing
 analyses.test <- expand.grid(diag.order=factor(c("outliers-normality")),
                         outliers=factor(c("boxplot")),# "robust")),
@@ -69,17 +69,21 @@ out$analysis
 out$dat
 
 rm(temp)
-#
+
+##########
+
+nWorkers <- 8
 
 source("investigate.r")
-out.all <- investigateRepeatAll(remake=F)
+#out.all <- investigateRepeatAll(remake=F)
 #debugonce(investigateRepeatAll)
-out.all <- investigateRepeatAll(remake=T, nreps=2, analyses=analyses.test)
-head(out.all)
+#out.all <- investigateRepeatAll(remake=T, nreps=2, analyses=analyses.test)
+#head(out.all)
 
 #debugonce(investigateHoldEachLevel)
-out.holdEachLevel <- investigateHoldEachLevel(remake=T, nreps=2, analyses=analyses.test)
-out.holdEachLevel <- investigateHoldEachLevel(remake=T)
+#out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nreps=2, analyses=initAnalyses()[1:5,], nWorkers)
+args(investigateHoldEachLevel)
+out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nWorkers=8)
 head(out.holdEachLevel)
 
 # diag=diagnostics

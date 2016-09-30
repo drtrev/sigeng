@@ -2,15 +2,15 @@
 # Investigate: Run analyses to answer questions
 ############################################################
 
-initializeCluster <- function()
+initializeCluster <- function(nWorkers=2)
 {
   library(foreach)
   library(doParallel)
   # cran.r-project.org/web/packages/doParallel/vignettes/gettingstartedParallel.pdf
-  cluster <- makeCluster(2)
+  cluster <- makeCluster(nWorkers)
   registerDoParallel(cluster)
-  # Check we have 2:
-  stopifnot(getDoParWorkers()==2)
+  # Check we have nWorkers:
+  stopifnot(getDoParWorkers()==nWorkers)
   
   cluster
 }
@@ -85,7 +85,7 @@ initAnalyses <- function()
 # .packages="foreach" as a parameter to foreach().
 # See also .export param for function names.
 # See parallelDemo.r
-holdEachLevel <- function(analyses, nreps)
+holdEachLevel <- function(analyses, nRepetitions, nWorkers)
 {
   # Here we run through all the combinations of analyses.
   # But we do so by "holding" one level at a time.
@@ -110,7 +110,7 @@ holdEachLevel <- function(analyses, nreps)
         # may need to use .packages or source/load.packages, seems to be needed after
         # registerDoParallel. An alternative is to use the .export param of foreach.
         # See parallelDemo.r
-        pvalRow <- foreach(i=1:nreps, .combine=data.frame) %dopar%
+        pvalRow <- foreach(i=1:nRepetitions, .combine=data.frame) %dopar%
         {
           source("generateData.r")
           source("analyse.r")
@@ -156,20 +156,20 @@ holdEachLevel <- function(analyses, nreps)
   #   4  ...
   interestingCols <- c("nSig", "columnName", "columnLevel")
   cat("----------\n")
-  cat("nreps:", nreps, "\n")
+  cat("nRepetitions:", nRepetitions, "\n")
   cat("ncol(results):", ncol(results), "\n")
   print(results[interestingCols])
   cat("----------\n")
   
-  metaInfo <- list(procesingTime=processingTime)
+  metaInfo <- list(procesingTime=processingTime, nWorkers=2)
   list(results=results, analyses=analyses, metaInfo=metaInfo)
 }
 
 ############################################################
 
-investigateHoldEachLevel <- function(remake=F, nreps=100, analyses=NULL)
+investigateHoldEachLevel <- function(loadFromCache=F, nreps=100, analyses=NULL, nWorkers=2)
 {
-  if (remake)
+  if (!loadFromCache)
   {
     if (is.null(analyses))
     {
@@ -180,9 +180,15 @@ investigateHoldEachLevel <- function(remake=F, nreps=100, analyses=NULL)
     # Get file name ready first in case there is a problem.
     outputFileName <- getOutputFileName("holdEachLevelList")
 
-    holdEachLevelList <- holdEachLevel(analyses, nreps)
+    cat("Initializing cluster with", nWorkers, "workers\n")
+    cluster <- initializeCluster(nWorkers)
 
+    # Perform analyses
+    holdEachLevelList <- holdEachLevel(analyses, nreps, nWorkers)
     save(holdEachLevelList, file=outputFileName)
+
+    # Clean up
+    killCluster(cluster)
   }
   else
   {
