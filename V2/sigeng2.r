@@ -81,7 +81,7 @@ source("investigate.r")
 #head(out.all)
 
 #debugonce(investigateHoldEachLevel)
-#out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nreps=2, analyses=initAnalyses()[1:5,], nWorkers)
+out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nreps=2, analyses=initAnalyses()[1:5,], nWorkers)
 args(investigateHoldEachLevel)
 out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nWorkers=8)
 head(out.holdEachLevel)

@@ -161,7 +161,7 @@ holdEachLevel <- function(analyses, nRepetitions, nWorkers)
   print(results[interestingCols])
   cat("----------\n")
   
-  metaInfo <- list(procesingTime=processingTime, nWorkers=2)
+  metaInfo <- list(procesingTime=processingTime, nWorkers=nWorkers)
   list(results=results, analyses=analyses, metaInfo=metaInfo)
 }
 
