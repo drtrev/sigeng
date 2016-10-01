@@ -26,8 +26,49 @@ killCluster <- function(cluster)
 # Helper functions
 ############################################################
 
-getOutputFileName <- function(filePrefix=NULL, path="results")
+# Some global information
+gInvestigate <- list(
+  defaultResultsPath="results",
+  fileSuffix=".RData"
+)
+
+getResultsFileName <- function(path=gDefaultResultsPath, filePrefix, fileNumber, fileSuffix)
 {
+  paste0(path, "/", filePrefix, fileNumber, fileSuffix)
+}
+
+getAllResultsFileNames <- function(filePrefix=NULL, path=gInvestigate$defaultResultsPath)
+{
+  # Return a vector of all results file names with a given prefix.
+  # Param:
+  #   filePrefix   some kind of prefix name to give to the file,
+  #                e.g. holdEachLevel
+  #   path         path to results output folder
+  
+  if (is.null(filePrefix))
+  {
+    stop("Specify file prefix")
+  }
+  
+  fileNumber <- 1
+  allFileNames <- NULL
+  
+  while (
+    file.exists(
+      fileName <- getResultsFileName(path, filePrefix, fileNumber, gInvestigate$fileSuffix)
+    )
+  )
+  {
+    allFileNames[fileNumber] <- fileName
+    fileNumber <- fileNumber + 1
+  }
+  
+  allFileNames
+}
+
+getNewResultsFileName <- function(filePrefix=NULL, path=gInvestigate$defaultResultsPath)
+{
+  # Return a new file name for results, by incrementing the file number.
   # Param:
   #   filePrefix   some kind of prefix name to give to the file,
   #                e.g. holdEachLevel
@@ -38,25 +79,20 @@ getOutputFileName <- function(filePrefix=NULL, path="results")
     stop("Specify file prefix")
   }
 
-  getResultsFileName <- function(path, filePrefix, fileNumber, fileSuffix)
-  {
-    paste0(path, "/", filePrefix, fileNumber, fileSuffix)
-  }
-  
   fileNumber <- 1
-  fileSuffix <- ".RData"
 
   while (
     file.exists(
-      getResultsFileName(path, filePrefix, fileNumber, fileSuffix)
+      getResultsFileName(path, filePrefix, fileNumber, gInvestigate$fileSuffix)
     )
   )
   {
     fileNumber <- fileNumber + 1
   }
+  
   cat("fileNumber:", fileNumber, "\n")
   
-  getResultsFileName(path, filePrefix, fileNumber, fileSuffix)
+  getResultsFileName(path, filePrefix, fileNumber, gInvestigate$fileSuffix)
 }
 
 ############################################################
@@ -169,6 +205,8 @@ holdEachLevel <- function(analyses, nRepetitions, nWorkers)
 
 investigateHoldEachLevel <- function(loadFromCache=F, nreps=100, analyses=NULL, nWorkers=2)
 {
+  investigationFileName <- "holdEachLevelList"
+
   if (!loadFromCache)
   {
     if (is.null(analyses))
@@ -178,7 +216,7 @@ investigateHoldEachLevel <- function(loadFromCache=F, nreps=100, analyses=NULL, 
     }
     
     # Get file name ready first in case there is a problem.
-    outputFileName <- getOutputFileName("holdEachLevelList")
+    outputFileName <- getNewResultsFileName()
 
     cat("Initializing cluster with", nWorkers, "workers\n")
     cluster <- initializeCluster(nWorkers)
@@ -193,6 +231,7 @@ investigateHoldEachLevel <- function(loadFromCache=F, nreps=100, analyses=NULL, 
   else
   {
     # TODO use file number
+    resultsFiles <- getAllResultsFileNames(investigationFileName)
     stop("remake==T not yet implemented")
     load("out-holdEachLevel.RData")
     load("out-holdEachLevelAnalyses.RData")

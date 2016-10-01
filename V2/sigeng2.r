@@ -81,9 +81,8 @@ source("investigate.r")
 #head(out.all)
 
 #debugonce(investigateHoldEachLevel)
-out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nreps=2, analyses=initAnalyses()[1:5,], nWorkers)
-args(investigateHoldEachLevel)
-out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nWorkers=8)
+#out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nreps=2, analyses=initAnalyses()[1:5,], nWorkers)
+out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=T, nWorkers=8)
 head(out.holdEachLevel)
 
 # diag=diagnostics
@@ -98,8 +97,6 @@ analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-out
 # to remove whole subject)
 class(analyses)
 analyses
-
-killCluster(cluster)
 
 #pvals <- aaply(1:100, 1, function(x) sim(analyses))
 # 1min 28 (88 seconds for 5 sims)
