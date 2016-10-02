@@ -95,6 +95,49 @@ getNewResultsFileName <- function(filePrefix=NULL, path=gInvestigate$defaultResu
   getResultsFileName(path, filePrefix, fileNumber, gInvestigate$fileSuffix)
 }
 
+# Can probably use RDS in future
+# http://stackoverflow.com/questions/5577221/
+# how-can-i-load-an-object-into-a-variable-name-that-i-specify-from-an-r-data-file
+loadObject <- function(fileName)
+{
+  env <- new.env()
+  objName <- load(fileName, env)
+  if (length(objName) != 1)
+  {
+    stop(paste0("More than one object found in file: ", fileName))
+  }
+  env[[objName]]
+}
+
+getFileNumber <- function(fileName)
+{
+  # Param
+  #   fileName   vector of fileNames
+
+  # [^0-9](\d*)\.RData --> get the digit at the end of the file name
+  # If this does not work as expected, check the case of your file suffix (Rdata vs. RData)
+  regularExprObj <- regexec(paste0("[^0-9]*(\\d*)\\", gInvestigate$fileSuffix), fileName)
+  
+  # regmatches returns a list of results
+  matches <- regmatches(fileName, regularExprObj)
+  if (length(matches) == 0)
+  {
+    stop("getFileNumber failed: No regex matches found")
+  }
+
+  fileNumber <- NULL
+  for (match in matches)
+  {
+    if (length(match)!=2)
+    {
+      stop("Unexpected number of matches found for fileName")
+    }
+    fileNumber <- c(fileNumber, match[2])
+  }
+
+  fileNumber
+}
+
 ############################################################
 # Create a set of analyses for use in investigations
 ############################################################
@@ -203,12 +246,17 @@ holdEachLevel <- function(analyses, nRepetitions, nWorkers)
 
 ############################################################
 
-investigateHoldEachLevel <- function(loadFromCache=F, nreps=100, analyses=NULL, nWorkers=2)
+investigateHoldEachLevel <- function(simulate=F, nreps=100, analyses=NULL, nWorkers=2)
 {
+  # Params:
+  #   simulate   run simulation (takes 30min with 8 cores/workers, 2 hours with 2 cores/workers)
+  #              or set to F to just load results files.
+
   investigationFileName <- "holdEachLevelList"
 
-  if (!loadFromCache)
+  if (simulate)
   {
+    cat("Running new simulation\n")
     if (is.null(analyses))
     {
       cat("Using default analyses\n")
@@ -228,47 +276,60 @@ investigateHoldEachLevel <- function(loadFromCache=F, nreps=100, analyses=NULL, 
     # Clean up
     killCluster(cluster)
   }
-  else
+
+  # Load all existing simulation data.
+  
+  # Results are stored individually as a list
+  # list(results=results, analyses=analyses, metaInfo=metaInfo)
+  
+  # Here we load them into a list of these lists, "individualResultsList".
+  
+  # Then we convert them into one single list "finalResultsList" of the form
+  # list(results=allResults, analyses=allAnalyses, metaInfo=allMetaInfo)
+  
+  finalResultsList <- list(results=NULL, analyses=NULL, metaInfo=NULL)
+  individualResultsList <- list()
+  expectedNames <- c("results", "analyses", "metaInfo")
+  
+  resultsFiles <- getAllResultsFileNames(investigationFileName)
+
+  for (fileName in resultsFiles)
   {
-    # investigationFileName should be the name of the file but
-    # also the name of the list that will be loaded.
-
-    # Assert list, e.g. holdEachLevelList is not currently found
-    if (investigationFileName %in% ls())
-    {
-      stop("asserting holdEachLevelList not found in env.")
-    }
+    individualIndex <- length(individualResultsList) + 1
+    individualResultsList[[individualIndex]] <- loadObject(fileName)
     
-    # Can probably use RDS in future
-    # http://stackoverflow.com/questions/5577221/
-    # how-can-i-load-an-object-into-a-variable-name-that-i-specify-from-an-r-data-file
-    loadObj <- function(fileName)
+    if (
+      !isTRUE(
+        all.equal(
+          names(individualResultsList[[individualIndex]]),
+          expectedNames
+        )
+      )
+    )
     {
-      env <- new.env()
-      objName <- load(fileName, env)
-      if (length(objName) != 1)
-      {
-        stop(paste0("More than one object found in file: ", fileName))
-      }
-      env[[objName]]
+      stop(paste0("Expected names not found in ", fileName))
     }
 
-    allResultsLists <- list()
-    resultsFiles <- getAllResultsFileNames(investigationFileName)
-    for (fileName in resultsFiles)
-    {
-      allResultsLists[[length(allResultsLists) + 1]] <- loadObj(fileName)
-      # Now the list, e.g. holdEachLevelList should be found
-      if (!(investigationFileName %in% ls()))
-      {
-        stop(paste0("Not found list: ", investigationFileName))
-      }
-    }
-    stop("remake==T not yet implemented")
-    load("out-holdEachLevel.RData")
-    load("out-holdEachLevelAnalyses.RData")
+    simulationId <- getFileNumber(fileName)
+    individualResultsList[[individualIndex]]$results$simulationId <- simulationId
+    individualResultsList[[individualIndex]]$analyses$simulationId <- simulationId
+    individualResultsList[[individualIndex]]$metaInfo$simulationId <- simulationId
+    
+    finalResultsList$results <- rbind(
+      finalResultsList$results,
+      individualResultsList[[individualIndex]]$results
+    )
+    finalResultsList$analyses <- rbind(
+      finalResultsList$analyses,
+      individualResultsList[[individualIndex]]$analyses
+    )
+    finalResultsList$metaInfo <- rbind(
+      finalResultsList$metaInfo,
+      individualResultsList[[individualIndex]]$metaInfo
+    )
   }
-  holdEachLevelList
+  
+  finalResultsList
 }
 
 ############################################################

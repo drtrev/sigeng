@@ -82,9 +82,24 @@ source("investigate.r")
 
 #debugonce(investigateHoldEachLevel)
 #out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=F, nreps=2, analyses=initAnalyses()[1:5,], nWorkers)
-out.holdEachLevel <- investigateHoldEachLevel(loadFromCache=T, nWorkers=8)
-head(out.holdEachLevel)
+holdEachLevelList <- investigateHoldEachLevel(simulate=F, nWorkers=8)
+interestingCols <- c("nSig", "columnName", "columnLevel", "simulationId")
+head(holdEachLevelList$results[interestingCols])
+tail(holdEachLevelList$results[interestingCols])
 
+library(doBy)
+library(plotrix)
+resultsSummary <- summaryBy(nSig ~ columnName + columnLevel, holdEachLevelList$results, FUN=c(mean, std.error))
+head(resultsSummary)
+resultsSummary$level <- paste(resultsSummary$columnName, resultsSummary$columnLevel, sep="-")
+resultsSummary$ymin <- resultsSummary$nSig.mean - resultsSummary$nSig.std.error
+resultsSummary$ymax <- resultsSummary$nSig.mean + resultsSummary$nSig.std.error
+
+ggplot(resultsSummary, aes(x=level, y=nSig.mean)) +
+  geom_bar(stat="identity") +
+  geom_errorbar(aes(ymin=ymin, ymax=ymax))
+
+#############
 # diag=diagnostics
 analyses <- expand.grid(diag.order=factor(c("outliers-normality", "normality-outliers")),
                         outliers=factor(c("classical1", "classical2", "boxplot")),# "robust")),
