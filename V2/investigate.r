@@ -230,8 +230,40 @@ investigateHoldEachLevel <- function(loadFromCache=F, nreps=100, analyses=NULL, 
   }
   else
   {
-    # TODO use file number
+    # investigationFileName should be the name of the file but
+    # also the name of the list that will be loaded.
+
+    # Assert list, e.g. holdEachLevelList is not currently found
+    if (investigationFileName %in% ls())
+    {
+      stop("asserting holdEachLevelList not found in env.")
+    }
+    
+    # Can probably use RDS in future
+    # http://stackoverflow.com/questions/5577221/
+    # how-can-i-load-an-object-into-a-variable-name-that-i-specify-from-an-r-data-file
+    loadObj <- function(fileName)
+    {
+      env <- new.env()
+      objName <- load(fileName, env)
+      if (length(objName) != 1)
+      {
+        stop(paste0("More than one object found in file: ", fileName))
+      }
+      env[[objName]]
+    }
+
+    allResultsLists <- list()
     resultsFiles <- getAllResultsFileNames(investigationFileName)
+    for (fileName in resultsFiles)
+    {
+      allResultsLists[[length(allResultsLists) + 1]] <- loadObj(fileName)
+      # Now the list, e.g. holdEachLevelList should be found
+      if (!(investigationFileName %in% ls()))
+      {
+        stop(paste0("Not found list: ", investigationFileName))
+      }
+    }
     stop("remake==T not yet implemented")
     load("out-holdEachLevel.RData")
     load("out-holdEachLevelAnalyses.RData")
