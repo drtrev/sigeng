@@ -91,10 +91,12 @@ library(doBy)
 library(plotrix)
 resultsSummary <- summaryBy(nSig ~ columnName + columnLevel, holdEachLevelList$results, FUN=c(mean, std.error))
 head(resultsSummary)
-resultsSummary$level <- paste(resultsSummary$columnName, resultsSummary$columnLevel, sep="-")
+resultsSummary$level <- paste(resultsSummary$columnName, resultsSummary$columnLevel, sep="\n")
 resultsSummary$ymin <- resultsSummary$nSig.mean - resultsSummary$nSig.std.error
 resultsSummary$ymax <- resultsSummary$nSig.mean + resultsSummary$nSig.std.error
 
+# Note outliers.notnormal boxplot may coincidentally be showing the expected results with all combinations
+# (because there is only one level for outliers.notnormal)
 ggplot(resultsSummary, aes(x=level, y=nSig.mean)) +
   geom_bar(stat="identity") +
   geom_errorbar(aes(ymin=ymin, ymax=ymax))
